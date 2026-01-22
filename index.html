@@ -2,66 +2,144 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>🍔 먹방 게임 - 픽셀아트</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
         body {
             margin: 0;
-            padding: 20px;
+            padding: 10px;
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
             background: #1a1a2e;
             min-height: 100vh;
+            min-height: 100dvh;
             font-family: 'Press Start 2P', monospace;
             image-rendering: pixelated;
+            overflow: hidden;
+            touch-action: manipulation;
         }
         h1 {
             color: #ffd700;
-            text-shadow: 4px 4px 0px #ff6b6b;
-            margin-bottom: 10px;
-            font-size: 1.5em;
+            text-shadow: 3px 3px 0px #ff6b6b;
+            margin: 5px 0;
+            font-size: clamp(0.8em, 4vw, 1.5em);
             font-family: 'Press Start 2P', monospace;
         }
         #game-container {
-            border: 8px solid #4a4a4a;
-            box-shadow: 0 0 0 4px #2a2a2a, 8px 8px 0 0 #000;
+            border: 4px solid #4a4a4a;
+            box-shadow: 0 0 0 2px #2a2a2a, 4px 4px 0 0 #000;
             image-rendering: pixelated;
             image-rendering: crisp-edges;
+            max-width: 100%;
+            touch-action: none;
         }
         .info {
             color: #aaa;
-            margin-top: 15px;
+            margin-top: 8px;
             text-align: center;
-            font-size: 10px;
+            font-size: clamp(6px, 2vw, 10px);
             font-family: 'Press Start 2P', monospace;
         }
         .sound-controls {
             position: fixed;
-            top: 10px;
-            right: 10px;
+            top: 5px;
+            right: 5px;
             display: flex;
-            gap: 10px;
+            gap: 5px;
             z-index: 1000;
         }
         .sound-btn {
             background: #4a4a4a;
-            border: 4px solid #2a2a2a;
-            width: 40px;
-            height: 40px;
-            font-size: 16px;
+            border: 3px solid #2a2a2a;
+            width: 36px;
+            height: 36px;
+            font-size: 14px;
             cursor: pointer;
             font-family: 'Press Start 2P', monospace;
             color: white;
+            border-radius: 4px;
         }
-        .sound-btn:hover {
+        .sound-btn:hover, .sound-btn:active {
             background: #6a6a6a;
         }
         .sound-btn.muted {
             opacity: 0.4;
+        }
+
+        /* 모바일 컨트롤 */
+        .mobile-controls {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        .mobile-btn {
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.3);
+            border: 4px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            font-size: 32px;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            pointer-events: auto;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .mobile-btn:active {
+            background: rgba(255, 255, 255, 0.6);
+            transform: scale(0.95);
+        }
+
+        /* 모바일 감지 시 컨트롤 표시 */
+        @media (max-width: 600px), (hover: none) and (pointer: coarse) {
+            .mobile-controls {
+                display: flex;
+            }
+            .info {
+                display: none;
+            }
+            body {
+                padding: 5px;
+            }
+            h1 {
+                margin: 2px 0;
+            }
+        }
+
+        /* 가로 모드 */
+        @media (orientation: landscape) and (max-height: 500px) {
+            h1 {
+                display: none;
+            }
+            .mobile-controls {
+                bottom: 10px;
+            }
+            .mobile-btn {
+                width: 60px;
+                height: 60px;
+                font-size: 24px;
+            }
         }
     </style>
 </head>
@@ -74,6 +152,12 @@
     <div id="game-container"></div>
     <div class="info">
         <p>ARROW KEYS or A/D to MOVE</p>
+    </div>
+
+    <!-- 모바일 컨트롤 버튼 -->
+    <div class="mobile-controls">
+        <button class="mobile-btn" id="leftBtn">◀</button>
+        <button class="mobile-btn" id="rightBtn">▶</button>
     </div>
 
     <script>
@@ -180,6 +264,12 @@
         let levelUpEffect = 0;
         let showLevelUp = false;
         let frameCounter = 0;
+
+        // 모바일/반응형 관련
+        let scaleFactor = 1;
+        let isMobile = false;
+        let touchLeft = false;
+        let touchRight = false;
 
         // 아이템 타입
         const ITEM_TYPES = {
@@ -558,14 +648,73 @@
         // ============================================
 
         function setup() {
-            let canvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+            // 반응형 캔버스 크기 계산
+            calculateCanvasSize();
+            let canvas = createCanvas(CANVAS_WIDTH * scaleFactor, CANVAS_HEIGHT * scaleFactor);
             canvas.parent('game-container');
             noSmooth(); // 픽셀 선명하게
-            playerX = width / 2;
+            playerX = CANVAS_WIDTH / 2;
+
+            // 모바일 컨트롤 설정
+            setupMobileControls();
+
+            // 윈도우 리사이즈 이벤트
+            window.addEventListener('resize', handleResize);
+        }
+
+        function calculateCanvasSize() {
+            isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+                       || window.innerWidth <= 600
+                       || ('ontouchstart' in window);
+
+            let maxWidth = window.innerWidth - 20;
+            let maxHeight = window.innerHeight - 100;
+
+            if (isMobile) {
+                maxHeight = window.innerHeight - 180; // 모바일 컨트롤 공간 확보
+            }
+
+            let scaleW = maxWidth / CANVAS_WIDTH;
+            let scaleH = maxHeight / CANVAS_HEIGHT;
+            scaleFactor = Math.min(scaleW, scaleH, 1.5); // 최대 1.5배
+            scaleFactor = Math.max(scaleFactor, 0.5); // 최소 0.5배
+        }
+
+        function handleResize() {
+            calculateCanvasSize();
+            resizeCanvas(CANVAS_WIDTH * scaleFactor, CANVAS_HEIGHT * scaleFactor);
+        }
+
+        function setupMobileControls() {
+            const leftBtn = document.getElementById('leftBtn');
+            const rightBtn = document.getElementById('rightBtn');
+
+            if (leftBtn && rightBtn) {
+                // 터치 시작
+                leftBtn.addEventListener('touchstart', (e) => { e.preventDefault(); touchLeft = true; initAudio(); });
+                rightBtn.addEventListener('touchstart', (e) => { e.preventDefault(); touchRight = true; initAudio(); });
+
+                // 터치 종료
+                leftBtn.addEventListener('touchend', (e) => { e.preventDefault(); touchLeft = false; });
+                rightBtn.addEventListener('touchend', (e) => { e.preventDefault(); touchRight = false; });
+                leftBtn.addEventListener('touchcancel', () => touchLeft = false);
+                rightBtn.addEventListener('touchcancel', () => touchRight = false);
+
+                // 마우스 이벤트 (테스트용)
+                leftBtn.addEventListener('mousedown', () => touchLeft = true);
+                rightBtn.addEventListener('mousedown', () => touchRight = true);
+                leftBtn.addEventListener('mouseup', () => touchLeft = false);
+                rightBtn.addEventListener('mouseup', () => touchRight = false);
+                leftBtn.addEventListener('mouseleave', () => touchLeft = false);
+                rightBtn.addEventListener('mouseleave', () => touchRight = false);
+            }
         }
 
         function draw() {
             frameCounter++;
+
+            // 스케일 적용
+            scale(scaleFactor);
 
             switch(gameState) {
                 case 'start': drawStartScreen(); break;
@@ -630,10 +779,10 @@
                 }
             }
 
-            // 입력
-            if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) playerX -= PLAYER_SPEED;
-            if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) playerX += PLAYER_SPEED;
-            playerX = constrain(playerX, 30, width - 30);
+            // 입력 (키보드 + 모바일 터치)
+            if (keyIsDown(LEFT_ARROW) || keyIsDown(65) || touchLeft) playerX -= PLAYER_SPEED;
+            if (keyIsDown(RIGHT_ARROW) || keyIsDown(68) || touchRight) playerX += PLAYER_SPEED;
+            playerX = constrain(playerX, 30, CANVAS_WIDTH - 30);
 
             // 아이템 생성
             let spawnInterval = SPAWN_INTERVAL_BASE - (level - 1) * 80;
@@ -1005,23 +1154,33 @@
         function mousePressed() {
             initAudio();
 
+            // 스케일 보정된 좌표
+            let mx = mouseX / scaleFactor;
+            let my = mouseY / scaleFactor;
+
             if (gameState === 'start') {
                 // START 버튼 (y:270, h:45)
-                if (mouseY > 247 && mouseY < 293 && mouseX > 120 && mouseX < 280) startGame();
+                if (my > 247 && my < 293 && mx > 120 && mx < 280) startGame();
                 // EXIT 버튼 (y:325, h:35)
-                if (mouseY > 307 && mouseY < 343 && mouseX > 130 && mouseX < 270) {
-                    window.close();
+                if (my > 307 && my < 343 && mx > 130 && mx < 270) {
+                    gameState = 'start'; // 모바일에서는 window.close() 대신
                 }
             }
             else if (gameState === 'playing') {
-                if (mouseX > width - 44 && mouseY < 40) { gameState = 'start'; stopBGM(); }
+                if (mx > CANVAS_WIDTH - 44 && my < 40) { gameState = 'start'; stopBGM(); }
             }
             else if (gameState === 'gameover') {
                 // RETRY 버튼 (y:430, h:40)
-                if (mouseY > 410 && mouseY < 450 && mouseX > 130 && mouseX < 270) startGame();
+                if (my > 410 && my < 450 && mx > 130 && mx < 270) startGame();
                 // EXIT 버튼 (y:478, h:35)
-                if (mouseY > 460 && mouseY < 496 && mouseX > 130 && mouseX < 270) gameState = 'start';
+                if (my > 460 && my < 496 && mx > 130 && mx < 270) gameState = 'start';
             }
+        }
+
+        // 터치 이벤트 지원
+        function touchStarted() {
+            mousePressed();
+            return false; // 기본 터치 동작 방지
         }
     </script>
 </body>
