@@ -12,27 +12,41 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #ff6b6b 0%, #feca57 50%, #48dbfb 100%);
             min-height: 100vh;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            animation: bgShift 10s ease infinite;
+        }
+        @keyframes bgShift {
+            0%, 100% { background: linear-gradient(135deg, #ff6b6b 0%, #feca57 50%, #48dbfb 100%); }
+            50% { background: linear-gradient(135deg, #a55eea 0%, #fd79a8 50%, #fdcb6e 100%); }
         }
         h1 {
             color: white;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            text-shadow: 3px 3px 0px #ff6b6b, 6px 6px 0px #feca57;
             margin-bottom: 10px;
+            font-size: 2.5em;
+            animation: bounce 1s ease infinite;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
         }
         #game-container {
-            border-radius: 10px;
+            border-radius: 20px;
             overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            box-shadow: 0 15px 50px rgba(0,0,0,0.4), 0 0 30px rgba(255,255,255,0.3);
+            border: 5px solid white;
         }
         .info {
             color: white;
             margin-top: 15px;
             text-align: center;
-            background: rgba(255,255,255,0.1);
-            padding: 10px 20px;
-            border-radius: 10px;
+            background: rgba(255,255,255,0.2);
+            padding: 15px 25px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            font-weight: bold;
         }
     </style>
 </head>
@@ -46,53 +60,63 @@
     <script>
         // ============================================
         // 🎮 먹방 게임 (Mukbang Game) - p5.js 버전
+        // ✨ 화려한 그래픽 업그레이드 버전
         // ============================================
 
         // 📊 게임 설정 상수
         const CANVAS_WIDTH = 400;
         const CANVAS_HEIGHT = 600;
-        const PLAYER_SIZE = 50;
-        const PLAYER_SPEED = 8;
-        const ITEM_SIZE = 40;
-        const GAME_TIME = 60; // 초
-        const SPAWN_INTERVAL = 800; // ms (0.8초)
+        const PLAYER_SIZE = 60;
+        const PLAYER_SPEED = 10;
+        const ITEM_SIZE = 45;
+        const GAME_TIME = 60;
+        const SPAWN_INTERVAL = 700;
 
-        // 🎨 색상 설정
+        // 🎨 화려한 색상 설정
         const COLORS = {
-            background: '#1a1a2e',
-            ground: '#16213e',
+            background1: '#1a1a2e',
+            background2: '#16213e',
+            background3: '#0f3460',
             text: '#ffffff',
             score: '#ffd700',
             life: '#ff6b6b',
-            time: '#4ecdc4'
+            time: '#4ecdc4',
+            rainbow: ['#ff6b6b', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff', '#5f27cd']
         };
 
         // 🍕 아이템 정의
         const ITEM_TYPES = {
-            pizza:   { emoji: '🍕', score: 10,  probability: 40, speed: 3 },
-            burger:  { emoji: '🍔', score: 20,  probability: 30, speed: 4 },
-            chicken: { emoji: '🍗', score: 30,  probability: 20, speed: 5 },
-            star:    { emoji: '⭐', score: 100, probability: 5,  speed: 6 },
-            bomb:    { emoji: '💣', score: -1,  probability: 5,  speed: 4 }  // -1 = 목숨 감소
+            pizza:   { emoji: '🍕', score: 10,  probability: 40, speed: 3, color: '#feca57' },
+            burger:  { emoji: '🍔', score: 20,  probability: 30, speed: 4, color: '#ff9f43' },
+            chicken: { emoji: '🍗', score: 30,  probability: 20, speed: 5, color: '#ee5a24' },
+            star:    { emoji: '⭐', score: 100, probability: 5,  speed: 6, color: '#f9ca24' },
+            bomb:    { emoji: '💣', score: -1,  probability: 5,  speed: 4, color: '#636e72' }
         };
 
         // 🏆 등급 시스템
         const GRADES = [
-            { min: 500, grade: '👑', title: '전설의 대식가', message: '먹방의 신이 강림했다!' },
-            { min: 300, grade: '🥇', title: '먹방 스타', message: '대단해!' },
-            { min: 100, grade: '🥈', title: '먹방 유망주', message: '제법인데?' },
-            { min: 0,   grade: '🥉', title: '배고픈 초보', message: '더 열심히 먹어보자!' }
+            { min: 500, grade: '👑', title: '전설의 대식가', message: '먹방의 신이 강림했다!', color: '#f9ca24' },
+            { min: 300, grade: '🥇', title: '먹방 스타', message: '대단해!', color: '#ffd700' },
+            { min: 100, grade: '🥈', title: '먹방 유망주', message: '제법인데?', color: '#c0c0c0' },
+            { min: 0,   grade: '🥉', title: '배고픈 초보', message: '더 열심히 먹어보자!', color: '#cd7f32' }
         ];
 
         // 📦 게임 상태 변수
-        let gameState = 'start'; // 'start', 'playing', 'gameover'
+        let gameState = 'start';
         let score = 0;
         let life = 3;
         let timeLeft = GAME_TIME;
         let playerX;
         let items = [];
+        let particles = [];
+        let stars = [];
         let lastSpawnTime = 0;
         let lastSecondTime = 0;
+        let rainbowOffset = 0;
+        let floatingEmojis = [];
+
+        // 버튼 영역
+        let startBtn, quitBtn, restartBtn, quitBtnGame;
 
         // ============================================
         // 🎬 p5.js 기본 함수
@@ -103,10 +127,26 @@
             canvas.parent('game-container');
             textAlign(CENTER, CENTER);
             playerX = width / 2;
+
+            // 배경 별 생성
+            for (let i = 0; i < 50; i++) {
+                stars.push({
+                    x: random(width),
+                    y: random(height),
+                    size: random(1, 4),
+                    twinkle: random(0.02, 0.05)
+                });
+            }
+
+            // 버튼 위치 설정
+            startBtn = { x: width/2, y: height/2 + 20, w: 200, h: 60 };
+            quitBtn = { x: width/2, y: height/2 + 100, w: 200, h: 50 };
+            restartBtn = { x: width/2, y: height - 150, w: 200, h: 60 };
+            quitBtnGame = { x: width - 50, y: 25, w: 80, h: 35 };
         }
 
         function draw() {
-            background(COLORS.background);
+            rainbowOffset += 0.02;
 
             switch(gameState) {
                 case 'start':
@@ -119,6 +159,112 @@
                 case 'gameover':
                     drawGameOverScreen();
                     break;
+            }
+
+            // 파티클 업데이트
+            updateParticles();
+        }
+
+        // ============================================
+        // ✨ 파티클 시스템
+        // ============================================
+
+        function createParticles(x, y, color, count) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: random(-5, 5),
+                    vy: random(-8, -2),
+                    size: random(5, 15),
+                    color: color,
+                    life: 1,
+                    decay: random(0.02, 0.05),
+                    emoji: random(['✨', '🌟', '💫', '⭐'])
+                });
+            }
+        }
+
+        function createScorePopup(x, y, points) {
+            particles.push({
+                x: x,
+                y: y,
+                vx: 0,
+                vy: -2,
+                size: 24,
+                color: points > 0 ? '#ffd700' : '#ff6b6b',
+                life: 1,
+                decay: 0.02,
+                text: (points > 0 ? '+' : '') + points,
+                isText: true
+            });
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.2;
+                p.life -= p.decay;
+
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        function drawParticles() {
+            for (let p of particles) {
+                if (p.isText) {
+                    textSize(p.size);
+                    fill(red(color(p.color)), green(color(p.color)), blue(color(p.color)), p.life * 255);
+                    text(p.text, p.x, p.y);
+                } else {
+                    textSize(p.size * p.life);
+                    fill(255, 255, 255, p.life * 255);
+                    text(p.emoji, p.x, p.y);
+                }
+            }
+        }
+
+        // ============================================
+        // 🌈 배경 그리기
+        // ============================================
+
+        function drawAnimatedBackground() {
+            // 그라데이션 배경
+            for (let i = 0; i < height; i++) {
+                let inter = map(i, 0, height, 0, 1);
+                let c1 = color('#1a1a2e');
+                let c2 = color('#16213e');
+                let c3 = color('#0f3460');
+                let c;
+                if (inter < 0.5) {
+                    c = lerpColor(c1, c2, inter * 2);
+                } else {
+                    c = lerpColor(c2, c3, (inter - 0.5) * 2);
+                }
+                stroke(c);
+                line(0, i, width, i);
+            }
+
+            // 반짝이는 별
+            noStroke();
+            for (let star of stars) {
+                let brightness = (sin(frameCount * star.twinkle) + 1) / 2;
+                fill(255, 255, 255, brightness * 200);
+                ellipse(star.x, star.y, star.size);
+            }
+        }
+
+        function drawRainbowBorder() {
+            noFill();
+            strokeWeight(4);
+            for (let i = 0; i < 6; i++) {
+                let c = color(COLORS.rainbow[(i + floor(rainbowOffset * 10)) % 6]);
+                stroke(red(c), green(c), blue(c), 150);
+                rect(i * 2, i * 2, width - i * 4, height - i * 4, 10);
             }
         }
 
@@ -133,6 +279,7 @@
             timeLeft = GAME_TIME;
             playerX = width / 2;
             items = [];
+            particles = [];
             lastSpawnTime = millis();
             lastSecondTime = millis();
         }
@@ -144,15 +291,16 @@
                 lastSecondTime = millis();
                 if (timeLeft <= 0) {
                     gameState = 'gameover';
+                    createParticles(width/2, height/2, '#ffd700', 30);
                     return;
                 }
             }
 
             // 🎹 키보드 입력 처리
-            if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) { // ← 또는 A
+            if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) {
                 playerX -= PLAYER_SPEED;
             }
-            if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) { // → 또는 D
+            if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) {
                 playerX += PLAYER_SPEED;
             }
 
@@ -168,21 +316,26 @@
             // 📦 아이템 업데이트 및 충돌 감지
             for (let i = items.length - 1; i >= 0; i--) {
                 let item = items[i];
-                
-                // 아이템 이동
+
+                // 아이템 이동 (물결 효과)
                 item.y += item.speed;
+                item.wobble += 0.1;
+                item.displayX = item.x + sin(item.wobble) * 5;
 
                 // 충돌 감지
                 if (checkCollision(item)) {
                     if (item.type === 'bomb') {
                         life--;
-                        // 💥 폭탄 이펙트 (화면 깜빡임)
+                        createParticles(item.displayX, item.y, '#ff6b6b', 15);
+                        createScorePopup(item.displayX, item.y, -1);
                         if (life <= 0) {
                             gameState = 'gameover';
                             return;
                         }
                     } else {
                         score += item.score;
+                        createParticles(item.displayX, item.y, item.color, 10);
+                        createScorePopup(item.displayX, item.y, item.score);
                     }
                     items.splice(i, 1);
                     continue;
@@ -198,45 +351,48 @@
         function spawnItem() {
             let itemType = getRandomItemType();
             let itemData = ITEM_TYPES[itemType];
-            
+
             items.push({
                 type: itemType,
                 emoji: itemData.emoji,
                 score: itemData.score,
                 speed: itemData.speed,
+                color: itemData.color,
                 x: random(ITEM_SIZE, width - ITEM_SIZE),
-                y: -ITEM_SIZE
+                displayX: 0,
+                y: -ITEM_SIZE,
+                wobble: random(TWO_PI),
+                rotation: 0
             });
         }
 
         function getRandomItemType() {
             let rand = random(100);
             let cumulative = 0;
-            
+
             for (let type in ITEM_TYPES) {
                 cumulative += ITEM_TYPES[type].probability;
                 if (rand < cumulative) {
                     return type;
                 }
             }
-            return 'pizza'; // 기본값
+            return 'pizza';
         }
 
         function checkCollision(item) {
-            // AABB 충돌 감지
             let playerLeft = playerX - PLAYER_SIZE/2;
             let playerRight = playerX + PLAYER_SIZE/2;
-            let playerTop = height - 80 - PLAYER_SIZE/2;
-            let playerBottom = height - 80 + PLAYER_SIZE/2;
+            let playerTop = height - 90 - PLAYER_SIZE/2;
+            let playerBottom = height - 90 + PLAYER_SIZE/2;
 
-            let itemLeft = item.x - ITEM_SIZE/2;
-            let itemRight = item.x + ITEM_SIZE/2;
+            let itemLeft = item.displayX - ITEM_SIZE/2;
+            let itemRight = item.displayX + ITEM_SIZE/2;
             let itemTop = item.y - ITEM_SIZE/2;
             let itemBottom = item.y + ITEM_SIZE/2;
 
-            return playerRight > itemLeft && 
-                   playerLeft < itemRight && 
-                   playerBottom > itemTop && 
+            return playerRight > itemLeft &&
+                   playerLeft < itemRight &&
+                   playerBottom > itemTop &&
                    playerTop < itemBottom;
         }
 
@@ -252,147 +408,289 @@
         // ============================================
 
         function drawStartScreen() {
-            // 배경 그라데이션 효과
-            for (let i = 0; i < height; i++) {
-                let inter = map(i, 0, height, 0, 1);
-                let c = lerpColor(color('#1a1a2e'), color('#16213e'), inter);
-                stroke(c);
-                line(0, i, width, i);
+            drawAnimatedBackground();
+            drawRainbowBorder();
+
+            // 떠다니는 음식 이모지
+            textSize(40);
+            for (let i = 0; i < 8; i++) {
+                let x = (frameCount * 0.5 + i * 60) % (width + 100) - 50;
+                let y = 100 + sin(frameCount * 0.03 + i) * 30 + i * 50;
+                let emojis = ['🍕', '🍔', '🍗', '🍟', '🌭', '🍩', '🍦', '🧁'];
+                text(emojis[i], x, y);
             }
 
-            // 타이틀
-            textSize(48);
-            fill(COLORS.score);
-            text('🍔 먹방 게임 🍕', width/2, height/3);
+            // 타이틀 (무지개 효과)
+            textSize(52);
+            for (let i = 0; i < 6; i++) {
+                let c = color(COLORS.rainbow[(i + floor(frameCount * 0.1)) % 6]);
+                fill(red(c), green(c), blue(c), 100);
+                text('🍔 먹방 게임 🍕', width/2 + i - 3, height/4 + i - 3);
+            }
+            fill(255);
+            text('🍔 먹방 게임 🍕', width/2, height/4);
 
             // 부제목
             textSize(18);
-            fill(COLORS.text);
-            text('음식을 먹고 폭탄을 피해라!', width/2, height/3 + 50);
+            fill(255, 255, 255, 200);
+            text('음식을 먹고 폭탄을 피해라!', width/2, height/4 + 60);
 
-            // 시작 버튼
-            let btnY = height/2 + 30;
-            drawButton('🎮 게임 시작', width/2, btnY);
+            // 시작 버튼 (화려한 효과)
+            drawFancyButton('🎮 게임 시작', startBtn.x, startBtn.y, startBtn.w, startBtn.h, '#4ecdc4', '#26de81');
+
+            // 종료 버튼
+            drawFancyButton('🚪 종료', quitBtn.x, quitBtn.y, quitBtn.w, quitBtn.h, '#ff6b6b', '#ee5a24');
 
             // 조작법
-            textSize(14);
-            fill(200);
+            textSize(16);
+            fill(255, 255, 255, 200);
             text('← → 방향키 또는 A D 키로 이동', width/2, height - 100);
-            text('SPACE 또는 클릭으로 시작', width/2, height - 70);
+            text('SPACE 또는 버튼 클릭으로 시작', width/2, height - 75);
 
             // 아이템 설명
-            textSize(12);
-            let descY = height - 40;
-            text('🍕+10  🍔+20  🍗+30  ⭐+100  💣목숨-1', width/2, descY);
+            textSize(14);
+            fill(255, 255, 255, 180);
+            text('🍕+10  🍔+20  🍗+30  ⭐+100  💣위험!', width/2, height - 40);
         }
 
-        function drawButton(label, x, y) {
-            // 버튼 배경
-            fill(100, 100, 200);
-            stroke(150, 150, 255);
+        function drawFancyButton(label, x, y, w, h, color1, color2) {
+            // 버튼 그림자
+            noStroke();
+            fill(0, 0, 0, 50);
+            rect(x - w/2 + 5, y - h/2 + 5, w, h, 20);
+
+            // 버튼 본체 (그라데이션 효과)
+            let hovered = mouseX > x - w/2 && mouseX < x + w/2 &&
+                         mouseY > y - h/2 && mouseY < y + h/2;
+
+            let c1 = color(color1);
+            let c2 = color(color2);
+
+            if (hovered) {
+                c1 = lerpColor(c1, color(255), 0.2);
+                c2 = lerpColor(c2, color(255), 0.2);
+            }
+
+            // 그라데이션
+            for (let i = 0; i < h; i++) {
+                let inter = map(i, 0, h, 0, 1);
+                let c = lerpColor(c1, c2, inter);
+                stroke(c);
+                line(x - w/2 + 10, y - h/2 + i, x + w/2 - 10, y - h/2 + i);
+            }
+
+            // 테두리
+            noFill();
+            stroke(255, 255, 255, 150);
             strokeWeight(3);
-            rectMode(CENTER);
-            rect(x, y, 180, 50, 25);
-            
-            // 버튼 텍스트
+            rect(x - w/2, y - h/2, w, h, 20);
+
+            // 텍스트
             noStroke();
             fill(255);
-            textSize(20);
+            textSize(h * 0.4);
             text(label, x, y);
+
+            // 반짝이 효과
+            if (hovered) {
+                fill(255, 255, 255, 100 + sin(frameCount * 0.2) * 50);
+                rect(x - w/2 + 5, y - h/2 + 5, w - 10, h/3, 15);
+            }
         }
 
         function drawGame() {
-            // 바닥
-            fill(COLORS.ground);
-            noStroke();
-            rect(0, height - 40, width, 40);
+            drawAnimatedBackground();
+
+            // 바닥 (그라데이션)
+            for (let i = 0; i < 50; i++) {
+                let inter = map(i, 0, 50, 0, 1);
+                let c = lerpColor(color('#2d3436'), color('#636e72'), inter);
+                stroke(c);
+                line(0, height - 50 + i, width, height - 50 + i);
+            }
+
+            // 바닥 하이라이트
+            stroke(255, 255, 255, 50);
+            strokeWeight(2);
+            line(0, height - 50, width, height - 50);
 
             // 아이템 그리기
-            textSize(ITEM_SIZE - 5);
+            textSize(ITEM_SIZE);
             for (let item of items) {
-                text(item.emoji, item.x, item.y);
+                // 아이템 그림자
+                fill(0, 0, 0, 50);
+                noStroke();
+                ellipse(item.displayX + 3, item.y + 3, ITEM_SIZE * 0.8);
+
+                // 아이템 회전 효과
+                push();
+                translate(item.displayX, item.y);
+                rotate(sin(item.wobble) * 0.1);
+                text(item.emoji, 0, 0);
+                pop();
             }
 
             // 플레이어 그리기
-            textSize(PLAYER_SIZE);
-            text('😋', playerX, height - 80);
-
-            // 플레이어 아래 플랫폼
-            fill(100, 100, 150);
-            rectMode(CENTER);
-            rect(playerX, height - 50, 60, 10, 5);
+            drawPlayer();
 
             // HUD 그리기
             drawHUD();
+
+            // 파티클
+            drawParticles();
+        }
+
+        function drawPlayer() {
+            // 플레이어 그림자
+            fill(0, 0, 0, 50);
+            noStroke();
+            ellipse(playerX + 3, height - 87, PLAYER_SIZE * 0.8);
+
+            // 플레이어
+            textSize(PLAYER_SIZE);
+            text('😋', playerX, height - 90);
+
+            // 플레이어 아래 플랫폼 (그라데이션)
+            for (let i = 0; i < 12; i++) {
+                let inter = map(i, 0, 12, 0, 1);
+                let c = lerpColor(color('#6c5ce7'), color('#a29bfe'), inter);
+                fill(c);
+                noStroke();
+                rect(playerX - 35 + i * 0.5, height - 55 + i, 70 - i, 2, 3);
+            }
+
+            // 플랫폼 빛 효과
+            fill(255, 255, 255, 100);
+            rect(playerX - 30, height - 55, 60, 3, 3);
         }
 
         function drawHUD() {
-            // HUD 배경
-            fill(0, 0, 0, 150);
+            // HUD 배경 (블러 효과)
             noStroke();
-            rectMode(CORNER);
-            rect(0, 0, width, 50);
+            for (let i = 0; i < 60; i++) {
+                fill(0, 0, 0, 5);
+                rect(0, i * 0.8, width, 1);
+            }
 
-            textSize(18);
-            
-            // 시간
-            fill(COLORS.time);
+            // HUD 하단 라인
+            stroke(255, 255, 255, 30);
+            strokeWeight(2);
+            line(0, 55, width, 55);
+
+            textSize(20);
+            noStroke();
+
+            // 시간 (색상 변화)
+            let timeColor = timeLeft > 10 ? color('#4ecdc4') : color('#ff6b6b');
+            if (timeLeft <= 10) {
+                timeColor = lerpColor(color('#ff6b6b'), color('#ffd700'), (sin(frameCount * 0.3) + 1) / 2);
+            }
+            fill(timeColor);
             textAlign(LEFT, CENTER);
-            text('⏱️ ' + timeLeft + '초', 15, 25);
+            text('⏱️ ' + timeLeft + '초', 15, 28);
 
-            // 점수
+            // 점수 (반짝이 효과)
             fill(COLORS.score);
             textAlign(CENTER, CENTER);
-            text('🏆 ' + score + '점', width/2, 25);
+            let scoreScale = 1 + sin(frameCount * 0.1) * 0.05;
+            textSize(20 * scoreScale);
+            text('🏆 ' + score + '점', width/2, 28);
 
-            // 목숨
+            // 목숨 (하트 애니메이션)
+            textSize(20);
             fill(COLORS.life);
             textAlign(RIGHT, CENTER);
-            let hearts = '❤️'.repeat(life) + '🖤'.repeat(3 - life);
-            text(hearts, width - 15, 25);
+            let hearts = '';
+            for (let i = 0; i < 3; i++) {
+                if (i < life) {
+                    hearts += '❤️';
+                } else {
+                    hearts += '🖤';
+                }
+            }
+            text(hearts, width - 15, 28);
+
+            // 종료 버튼 (게임 중)
+            drawSmallButton('✕ 종료', quitBtnGame.x, quitBtnGame.y, quitBtnGame.w, quitBtnGame.h);
+        }
+
+        function drawSmallButton(label, x, y, w, h) {
+            let hovered = mouseX > x - w/2 && mouseX < x + w/2 &&
+                         mouseY > y - h/2 && mouseY < y + h/2;
+
+            // 버튼 배경
+            if (hovered) {
+                fill(255, 100, 100, 200);
+            } else {
+                fill(100, 100, 100, 150);
+            }
+            noStroke();
+            rect(x - w/2, y - h/2, w, h, 10);
+
+            // 텍스트
+            fill(255);
+            textAlign(CENTER, CENTER);
+            textSize(14);
+            text(label, x, y);
         }
 
         function drawGameOverScreen() {
+            drawAnimatedBackground();
+
             // 어두운 오버레이
-            fill(0, 0, 0, 200);
-            rectMode(CORNER);
+            fill(0, 0, 0, 180);
             rect(0, 0, width, height);
+
+            // 축하 파티클
+            if (frameCount % 10 === 0) {
+                createParticles(random(width), random(height/2),
+                    COLORS.rainbow[floor(random(6))], 3);
+            }
+            drawParticles();
 
             let grade = getGrade();
 
-            // GAME OVER 텍스트
-            textSize(36);
-            fill(255, 100, 100);
+            // GAME OVER 텍스트 (네온 효과)
             textAlign(CENTER, CENTER);
-            text('GAME OVER', width/2, height/4);
+            for (let i = 5; i > 0; i--) {
+                fill(255, 100, 100, 50);
+                textSize(42 + i * 2);
+                text('GAME OVER', width/2, height/6);
+            }
+            fill(255, 150, 150);
+            textSize(42);
+            text('GAME OVER', width/2, height/6);
 
-            // 등급
-            textSize(60);
-            fill(255);
-            text(grade.grade, width/2, height/3 + 30);
+            // 등급 (크게 + 애니메이션)
+            let gradeScale = 1 + sin(frameCount * 0.1) * 0.1;
+            textSize(80 * gradeScale);
+            text(grade.grade, width/2, height/3 + 10);
 
             // 칭호
-            textSize(24);
-            fill(COLORS.score);
-            text(grade.title, width/2, height/2);
+            textSize(28);
+            fill(grade.color);
+            text(grade.title, width/2, height/2 - 20);
 
             // 점수
-            textSize(20);
+            textSize(24);
             fill(255);
-            text('최종 점수: ' + score + '점', width/2, height/2 + 50);
+            text('최종 점수: ' + score + '점', width/2, height/2 + 30);
 
             // 메시지
-            textSize(16);
+            textSize(18);
             fill(200);
-            text('"' + grade.message + '"', width/2, height/2 + 90);
+            text('"' + grade.message + '"', width/2, height/2 + 70);
 
             // 다시하기 버튼
-            drawButton('🔄 다시 하기', width/2, height - 120);
+            drawFancyButton('🔄 다시 하기', restartBtn.x, restartBtn.y, restartBtn.w, restartBtn.h, '#4ecdc4', '#26de81');
+
+            // 종료 버튼
+            drawFancyButton('🚪 종료', width/2, height - 80, 200, 50, '#ff6b6b', '#ee5a24');
 
             // 안내
             textSize(14);
             fill(150);
-            text('SPACE 또는 클릭으로 재시작', width/2, height - 70);
+            text('SPACE 또는 버튼 클릭', width/2, height - 35);
         }
 
         // ============================================
@@ -403,15 +701,67 @@
             if (key === ' ') {
                 handleStart();
             }
+            if (key === 'Escape' || key === 'q' || key === 'Q') {
+                if (gameState === 'playing') {
+                    gameState = 'start';
+                }
+            }
         }
 
         function mousePressed() {
+            if (gameState === 'start') {
+                // 시작 버튼
+                if (isInsideButton(startBtn)) {
+                    startGame();
+                    return;
+                }
+                // 종료 버튼
+                if (isInsideButton(quitBtn)) {
+                    // 창 닫기 시도 (보안상 작동 안 할 수 있음)
+                    window.close();
+                    // 대안: 시작 화면 유지
+                    return;
+                }
+            }
+            else if (gameState === 'playing') {
+                // 게임 중 종료 버튼
+                if (isInsideButton(quitBtnGame)) {
+                    gameState = 'start';
+                    return;
+                }
+            }
+            else if (gameState === 'gameover') {
+                // 다시하기 버튼
+                if (isInsideButton(restartBtn)) {
+                    startGame();
+                    return;
+                }
+                // 종료 버튼
+                if (mouseX > width/2 - 100 && mouseX < width/2 + 100 &&
+                    mouseY > height - 105 && mouseY < height - 55) {
+                    gameState = 'start';
+                    return;
+                }
+            }
+
             handleStart();
+        }
+
+        function isInsideButton(btn) {
+            return mouseX > btn.x - btn.w/2 && mouseX < btn.x + btn.w/2 &&
+                   mouseY > btn.y - btn.h/2 && mouseY < btn.y + btn.h/2;
         }
 
         function handleStart() {
             if (gameState === 'start' || gameState === 'gameover') {
-                startGame();
+                // 버튼 영역 외 클릭 시에만 시작
+                if (gameState === 'start') {
+                    if (!isInsideButton(quitBtn)) {
+                        startGame();
+                    }
+                } else {
+                    startGame();
+                }
             }
         }
     </script>
