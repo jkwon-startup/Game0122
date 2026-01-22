@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🍔 먹방 게임 - p5.js</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        h1 {
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            margin-bottom: 10px;
+        }
+        #game-container {
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .info {
+            color: white;
+            margin-top: 15px;
+            text-align: center;
+            background: rgba(255,255,255,0.1);
+            padding: 10px 20px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🍔 먹방 게임 🍕</h1>
+    <div id="game-container"></div>
+    <div class="info">
+        <p>⌨️ 조작: ← → 방향키 또는 A, D 키</p>
+    </div>
+
+    <script>
+        // ============================================
+        // 🎮 먹방 게임 (Mukbang Game) - p5.js 버전
+        // ============================================
+
+        // 📊 게임 설정 상수
+        const CANVAS_WIDTH = 400;
+        const CANVAS_HEIGHT = 600;
+        const PLAYER_SIZE = 50;
+        const PLAYER_SPEED = 8;
+        const ITEM_SIZE = 40;
+        const GAME_TIME = 60; // 초
+        const SPAWN_INTERVAL = 800; // ms (0.8초)
+
+        // 🎨 색상 설정
+        const COLORS = {
+            background: '#1a1a2e',
+            ground: '#16213e',
+            text: '#ffffff',
+            score: '#ffd700',
+            life: '#ff6b6b',
+            time: '#4ecdc4'
+        };
+
+        // 🍕 아이템 정의
+        const ITEM_TYPES = {
+            pizza:   { emoji: '🍕', score: 10,  probability: 40, speed: 3 },
+            burger:  { emoji: '🍔', score: 20,  probability: 30, speed: 4 },
+            chicken: { emoji: '🍗', score: 30,  probability: 20, speed: 5 },
+            star:    { emoji: '⭐', score: 100, probability: 5,  speed: 6 },
+            bomb:    { emoji: '💣', score: -1,  probability: 5,  speed: 4 }  // -1 = 목숨 감소
+        };
+
+        // 🏆 등급 시스템
+        const GRADES = [
+            { min: 500, grade: '👑', title: '전설의 대식가', message: '먹방의 신이 강림했다!' },
+            { min: 300, grade: '🥇', title: '먹방 스타', message: '대단해!' },
+            { min: 100, grade: '🥈', title: '먹방 유망주', message: '제법인데?' },
+            { min: 0,   grade: '🥉', title: '배고픈 초보', message: '더 열심히 먹어보자!' }
+        ];
+
+        // 📦 게임 상태 변수
+        let gameState = 'start'; // 'start', 'playing', 'gameover'
+        let score = 0;
+        let life = 3;
+        let timeLeft = GAME_TIME;
+        let playerX;
+        let items = [];
+        let lastSpawnTime = 0;
+        let lastSecondTime = 0;
+
+        // ============================================
+        // 🎬 p5.js 기본 함수
+        // ============================================
+
+        function setup() {
+            let canvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+            canvas.parent('game-container');
+            textAlign(CENTER, CENTER);
+            playerX = width / 2;
+        }
+
+        function draw() {
+            background(COLORS.background);
+
+            switch(gameState) {
+                case 'start':
+                    drawStartScreen();
+                    break;
+                case 'playing':
+                    updateGame();
+                    drawGame();
+                    break;
+                case 'gameover':
+                    drawGameOverScreen();
+                    break;
+            }
+        }
+
+        // ============================================
+        // 🎮 게임 로직 함수
+        // ============================================
+
+        function startGame() {
+            gameState = 'playing';
+            score = 0;
+            life = 3;
+            timeLeft = GAME_TIME;
+            playerX = width / 2;
+            items = [];
+            lastSpawnTime = millis();
+            lastSecondTime = millis();
+        }
+
+        function updateGame() {
+            // ⏱️ 타이머 업데이트
+            if (millis() - lastSecondTime >= 1000) {
+                timeLeft--;
+                lastSecondTime = millis();
+                if (timeLeft <= 0) {
+                    gameState = 'gameover';
+                    return;
+                }
+            }
+
+            // 🎹 키보드 입력 처리
+            if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) { // ← 또는 A
+                playerX -= PLAYER_SPEED;
+            }
+            if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) { // → 또는 D
+                playerX += PLAYER_SPEED;
+            }
+
+            // 🚧 화면 경계 처리
+            playerX = constrain(playerX, PLAYER_SIZE/2, width - PLAYER_SIZE/2);
+
+            // 🍕 아이템 생성
+            if (millis() - lastSpawnTime >= SPAWN_INTERVAL) {
+                spawnItem();
+                lastSpawnTime = millis();
+            }
+
+            // 📦 아이템 업데이트 및 충돌 감지
+            for (let i = items.length - 1; i >= 0; i--) {
+                let item = items[i];
+                
+                // 아이템 이동
+                item.y += item.speed;
+
+                // 충돌 감지
+                if (checkCollision(item)) {
+                    if (item.type === 'bomb') {
+                        life--;
+                        // 💥 폭탄 이펙트 (화면 깜빡임)
+                        if (life <= 0) {
+                            gameState = 'gameover';
+                            return;
+                        }
+                    } else {
+                        score += item.score;
+                    }
+                    items.splice(i, 1);
+                    continue;
+                }
+
+                // 화면 밖으로 나간 아이템 삭제
+                if (item.y > height + ITEM_SIZE) {
+                    items.splice(i, 1);
+                }
+            }
+        }
+
+        function spawnItem() {
+            let itemType = getRandomItemType();
+            let itemData = ITEM_TYPES[itemType];
+            
+            items.push({
+                type: itemType,
+                emoji: itemData.emoji,
+                score: itemData.score,
+                speed: itemData.speed,
+                x: random(ITEM_SIZE, width - ITEM_SIZE),
+                y: -ITEM_SIZE
+            });
+        }
+
+        function getRandomItemType() {
+            let rand = random(100);
+            let cumulative = 0;
+            
+            for (let type in ITEM_TYPES) {
+                cumulative += ITEM_TYPES[type].probability;
+                if (rand < cumulative) {
+                    return type;
+                }
+            }
+            return 'pizza'; // 기본값
+        }
+
+        function checkCollision(item) {
+            // AABB 충돌 감지
+            let playerLeft = playerX - PLAYER_SIZE/2;
+            let playerRight = playerX + PLAYER_SIZE/2;
+            let playerTop = height - 80 - PLAYER_SIZE/2;
+            let playerBottom = height - 80 + PLAYER_SIZE/2;
+
+            let itemLeft = item.x - ITEM_SIZE/2;
+            let itemRight = item.x + ITEM_SIZE/2;
+            let itemTop = item.y - ITEM_SIZE/2;
+            let itemBottom = item.y + ITEM_SIZE/2;
+
+            return playerRight > itemLeft && 
+                   playerLeft < itemRight && 
+                   playerBottom > itemTop && 
+                   playerTop < itemBottom;
+        }
+
+        function getGrade() {
+            for (let g of GRADES) {
+                if (score >= g.min) return g;
+            }
+            return GRADES[GRADES.length - 1];
+        }
+
+        // ============================================
+        // 🎨 화면 그리기 함수
+        // ============================================
+
+        function drawStartScreen() {
+            // 배경 그라데이션 효과
+            for (let i = 0; i < height; i++) {
+                let inter = map(i, 0, height, 0, 1);
+                let c = lerpColor(color('#1a1a2e'), color('#16213e'), inter);
+                stroke(c);
+                line(0, i, width, i);
+            }
+
+            // 타이틀
+            textSize(48);
+            fill(COLORS.score);
+            text('🍔 먹방 게임 🍕', width/2, height/3);
+
+            // 부제목
+            textSize(18);
+            fill(COLORS.text);
+            text('음식을 먹고 폭탄을 피해라!', width/2, height/3 + 50);
+
+            // 시작 버튼
+            let btnY = height/2 + 30;
+            drawButton('🎮 게임 시작', width/2, btnY);
+
+            // 조작법
+            textSize(14);
+            fill(200);
+            text('← → 방향키 또는 A D 키로 이동', width/2, height - 100);
+            text('SPACE 또는 클릭으로 시작', width/2, height - 70);
+
+            // 아이템 설명
+            textSize(12);
+            let descY = height - 40;
+            text('🍕+10  🍔+20  🍗+30  ⭐+100  💣목숨-1', width/2, descY);
+        }
+
+        function drawButton(label, x, y) {
+            // 버튼 배경
+            fill(100, 100, 200);
+            stroke(150, 150, 255);
+            strokeWeight(3);
+            rectMode(CENTER);
+            rect(x, y, 180, 50, 25);
+            
+            // 버튼 텍스트
+            noStroke();
+            fill(255);
+            textSize(20);
+            text(label, x, y);
+        }
+
+        function drawGame() {
+            // 바닥
+            fill(COLORS.ground);
+            noStroke();
+            rect(0, height - 40, width, 40);
+
+            // 아이템 그리기
+            textSize(ITEM_SIZE - 5);
+            for (let item of items) {
+                text(item.emoji, item.x, item.y);
+            }
+
+            // 플레이어 그리기
+            textSize(PLAYER_SIZE);
+            text('😋', playerX, height - 80);
+
+            // 플레이어 아래 플랫폼
+            fill(100, 100, 150);
+            rectMode(CENTER);
+            rect(playerX, height - 50, 60, 10, 5);
+
+            // HUD 그리기
+            drawHUD();
+        }
+
+        function drawHUD() {
+            // HUD 배경
+            fill(0, 0, 0, 150);
+            noStroke();
+            rectMode(CORNER);
+            rect(0, 0, width, 50);
+
+            textSize(18);
+            
+            // 시간
+            fill(COLORS.time);
+            textAlign(LEFT, CENTER);
+            text('⏱️ ' + timeLeft + '초', 15, 25);
+
+            // 점수
+            fill(COLORS.score);
+            textAlign(CENTER, CENTER);
+            text('🏆 ' + score + '점', width/2, 25);
+
+            // 목숨
+            fill(COLORS.life);
+            textAlign(RIGHT, CENTER);
+            let hearts = '❤️'.repeat(life) + '🖤'.repeat(3 - life);
+            text(hearts, width - 15, 25);
+        }
+
+        function drawGameOverScreen() {
+            // 어두운 오버레이
+            fill(0, 0, 0, 200);
+            rectMode(CORNER);
+            rect(0, 0, width, height);
+
+            let grade = getGrade();
+
+            // GAME OVER 텍스트
+            textSize(36);
+            fill(255, 100, 100);
+            textAlign(CENTER, CENTER);
+            text('GAME OVER', width/2, height/4);
+
+            // 등급
+            textSize(60);
+            fill(255);
+            text(grade.grade, width/2, height/3 + 30);
+
+            // 칭호
+            textSize(24);
+            fill(COLORS.score);
+            text(grade.title, width/2, height/2);
+
+            // 점수
+            textSize(20);
+            fill(255);
+            text('최종 점수: ' + score + '점', width/2, height/2 + 50);
+
+            // 메시지
+            textSize(16);
+            fill(200);
+            text('"' + grade.message + '"', width/2, height/2 + 90);
+
+            // 다시하기 버튼
+            drawButton('🔄 다시 하기', width/2, height - 120);
+
+            // 안내
+            textSize(14);
+            fill(150);
+            text('SPACE 또는 클릭으로 재시작', width/2, height - 70);
+        }
+
+        // ============================================
+        // 🎹 입력 처리 함수
+        // ============================================
+
+        function keyPressed() {
+            if (key === ' ') {
+                handleStart();
+            }
+        }
+
+        function mousePressed() {
+            handleStart();
+        }
+
+        function handleStart() {
+            if (gameState === 'start' || gameState === 'gameover') {
+                startGame();
+            }
+        }
+    </script>
+</body>
+</html>
