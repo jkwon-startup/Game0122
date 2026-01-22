@@ -48,20 +48,247 @@
             backdrop-filter: blur(10px);
             font-weight: bold;
         }
+        .sound-controls {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+        .sound-btn {
+            background: rgba(255,255,255,0.9);
+            border: none;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            font-size: 20px;
+            cursor: pointer;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+        .sound-btn:hover {
+            transform: scale(1.1);
+        }
+        .sound-btn.muted {
+            opacity: 0.5;
+        }
     </style>
 </head>
 <body>
+    <div class="sound-controls">
+        <button class="sound-btn" id="bgmBtn" onclick="toggleBGM()">🎵</button>
+        <button class="sound-btn" id="sfxBtn" onclick="toggleSFX()">🔊</button>
+    </div>
     <h1>🍔 먹방 게임 🍕</h1>
     <div id="game-container"></div>
     <div class="info">
-        <p>⌨️ 조작: ← → 방향키 또는 A, D 키</p>
+        <p>⌨️ 조작: ← → 방향키 또는 A, D 키 | 🎵 음악/효과음 버튼으로 ON/OFF</p>
     </div>
 
     <script>
         // ============================================
         // 🎮 먹방 게임 (Mukbang Game) - p5.js 버전
-        // ✨ 화려한 그래픽 + 콤보 + 레벨 시스템
+        // ✨ 화려한 그래픽 + 콤보 + 레벨 + 사운드
         // ============================================
+
+        // 🔊 사운드 시스템
+        let audioContext;
+        let bgmEnabled = true;
+        let sfxEnabled = true;
+        let bgmOscillator = null;
+        let bgmGain = null;
+        let bgmPlaying = false;
+        let bgmNoteIndex = 0;
+        let bgmInterval = null;
+
+        // BGM 멜로디 (귀여운 게임 음악)
+        const BGM_MELODY = [
+            { note: 523.25, duration: 200 }, // C5
+            { note: 587.33, duration: 200 }, // D5
+            { note: 659.25, duration: 200 }, // E5
+            { note: 698.46, duration: 200 }, // F5
+            { note: 783.99, duration: 400 }, // G5
+            { note: 783.99, duration: 200 }, // G5
+            { note: 698.46, duration: 200 }, // F5
+            { note: 659.25, duration: 200 }, // E5
+            { note: 587.33, duration: 200 }, // D5
+            { note: 523.25, duration: 400 }, // C5
+            { note: 659.25, duration: 200 }, // E5
+            { note: 783.99, duration: 200 }, // G5
+            { note: 880.00, duration: 400 }, // A5
+            { note: 783.99, duration: 200 }, // G5
+            { note: 659.25, duration: 200 }, // E5
+            { note: 523.25, duration: 400 }, // C5
+        ];
+
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        }
+
+        // 효과음 재생 함수
+        function playSound(type) {
+            if (!sfxEnabled) return;
+            initAudio();
+
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            switch(type) {
+                case 'eat':
+                    // 먹는 소리 - 밝고 짧은 음
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(1320, audioContext.currentTime + 0.1);
+                    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+                    oscillator.start(audioContext.currentTime);
+                    oscillator.stop(audioContext.currentTime + 0.15);
+                    break;
+
+                case 'eatBig':
+                    // 큰 음식 먹는 소리 - 더 풍부한 음
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.1);
+                    oscillator.frequency.exponentialRampToValueAtTime(1320, audioContext.currentTime + 0.2);
+                    gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.25);
+                    oscillator.start(audioContext.currentTime);
+                    oscillator.stop(audioContext.currentTime + 0.25);
+                    break;
+
+                case 'star':
+                    // 별 먹는 소리 - 반짝이는 아르페지오
+                    playArpeggio([1047, 1319, 1568, 2093], 0.08, 0.3);
+                    break;
+
+                case 'bomb':
+                    // 폭탄 소리 - 낮고 거친 음
+                    oscillator.type = 'sawtooth';
+                    oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + 0.3);
+                    gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                    oscillator.start(audioContext.currentTime);
+                    oscillator.stop(audioContext.currentTime + 0.3);
+                    break;
+
+                case 'combo':
+                    // 콤보 소리 - 상승하는 음
+                    oscillator.type = 'square';
+                    oscillator.frequency.setValueAtTime(523, audioContext.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(1047, audioContext.currentTime + 0.15);
+                    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+                    oscillator.start(audioContext.currentTime);
+                    oscillator.stop(audioContext.currentTime + 0.2);
+                    break;
+
+                case 'levelUp':
+                    // 레벨업 소리 - 팡파레
+                    playArpeggio([523, 659, 784, 1047, 1319, 1568], 0.12, 0.35);
+                    break;
+
+                case 'gameOver':
+                    // 게임오버 소리 - 하강하는 음
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(220, audioContext.currentTime + 0.3);
+                    oscillator.frequency.exponentialRampToValueAtTime(110, audioContext.currentTime + 0.6);
+                    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.8);
+                    oscillator.start(audioContext.currentTime);
+                    oscillator.stop(audioContext.currentTime + 0.8);
+                    break;
+
+                case 'start':
+                    // 시작 소리 - 밝은 팡파레
+                    playArpeggio([523, 659, 784, 1047], 0.1, 0.3);
+                    break;
+            }
+        }
+
+        function playArpeggio(notes, interval, volume) {
+            notes.forEach((freq, i) => {
+                setTimeout(() => {
+                    if (!sfxEnabled) return;
+                    const osc = audioContext.createOscillator();
+                    const gain = audioContext.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioContext.destination);
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(volume, audioContext.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+                    osc.start(audioContext.currentTime);
+                    osc.stop(audioContext.currentTime + 0.2);
+                }, i * interval * 1000);
+            });
+        }
+
+        // BGM 재생
+        function startBGM() {
+            if (!bgmEnabled || bgmPlaying) return;
+            initAudio();
+            bgmPlaying = true;
+
+            function playBGMNote() {
+                if (!bgmPlaying || !bgmEnabled) return;
+
+                const noteData = BGM_MELODY[bgmNoteIndex];
+                const osc = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+
+                osc.connect(gain);
+                gain.connect(audioContext.destination);
+
+                osc.type = 'sine';
+                osc.frequency.value = noteData.note;
+
+                gain.gain.setValueAtTime(0.15, audioContext.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + noteData.duration / 1000);
+
+                osc.start(audioContext.currentTime);
+                osc.stop(audioContext.currentTime + noteData.duration / 1000);
+
+                bgmNoteIndex = (bgmNoteIndex + 1) % BGM_MELODY.length;
+
+                bgmInterval = setTimeout(playBGMNote, noteData.duration);
+            }
+
+            playBGMNote();
+        }
+
+        function stopBGM() {
+            bgmPlaying = false;
+            if (bgmInterval) {
+                clearTimeout(bgmInterval);
+                bgmInterval = null;
+            }
+        }
+
+        function toggleBGM() {
+            bgmEnabled = !bgmEnabled;
+            document.getElementById('bgmBtn').classList.toggle('muted', !bgmEnabled);
+            if (bgmEnabled && gameState === 'playing') {
+                startBGM();
+            } else {
+                stopBGM();
+            }
+        }
+
+        function toggleSFX() {
+            sfxEnabled = !sfxEnabled;
+            document.getElementById('sfxBtn').classList.toggle('muted', !sfxEnabled);
+        }
 
         // 📊 게임 설정 상수
         const CANVAS_WIDTH = 400;
@@ -72,31 +299,15 @@
         const GAME_TIME = 60;
         const SPAWN_INTERVAL_BASE = 800;
 
-        // 🎨 레벨별 배경 색상 (밝고 화려하게)
+        // 🎨 레벨별 배경 색상
         const LEVEL_THEMES = [
-            { // 레벨 1: 맑은 하늘
-                bg1: '#87CEEB', bg2: '#98D8C8', bg3: '#7FDBFF',
-                ground: '#90EE90', name: '🌤️ 맑은 하늘'
-            },
-            { // 레벨 2: 노을 하늘
-                bg1: '#FF9A8B', bg2: '#FECDA6', bg3: '#FFD93D',
-                ground: '#F4D03F', name: '🌅 노을 하늘'
-            },
-            { // 레벨 3: 보라빛 우주
-                bg1: '#A855F7', bg2: '#EC4899', bg3: '#8B5CF6',
-                ground: '#C084FC', name: '🌌 보라빛 우주'
-            },
-            { // 레벨 4: 무지개 나라
-                bg1: '#FF6B6B', bg2: '#4ECDC4', bg3: '#FFE66D',
-                ground: '#95E1D3', name: '🌈 무지개 나라'
-            },
-            { // 레벨 5: 황금 천국
-                bg1: '#FFD700', bg2: '#FFA500', bg3: '#FF8C00',
-                ground: '#FFEC8B', name: '👑 황금 천국'
-            }
+            { bg1: '#87CEEB', bg2: '#98D8C8', bg3: '#7FDBFF', ground: '#90EE90', name: '🌤️ 맑은 하늘' },
+            { bg1: '#FF9A8B', bg2: '#FECDA6', bg3: '#FFD93D', ground: '#F4D03F', name: '🌅 노을 하늘' },
+            { bg1: '#A855F7', bg2: '#EC4899', bg3: '#8B5CF6', ground: '#C084FC', name: '🌌 보라빛 우주' },
+            { bg1: '#FF6B6B', bg2: '#4ECDC4', bg3: '#FFE66D', ground: '#95E1D3', name: '🌈 무지개 나라' },
+            { bg1: '#FFD700', bg2: '#FFA500', bg3: '#FF8C00', ground: '#FFEC8B', name: '👑 황금 천국' }
         ];
 
-        // 🎨 색상 설정
         const COLORS = {
             text: '#ffffff',
             score: '#FFD700',
@@ -106,7 +317,6 @@
             rainbow: ['#FF6B6B', '#FECA57', '#48DBFB', '#FF9FF3', '#54A0FF', '#5F27CD']
         };
 
-        // 🍕 아이템 정의 (점수 차별화)
         const ITEM_TYPES = {
             pizza:   { emoji: '🍕', score: 10,  probability: 35, speed: 3, color: '#FECA57', size: 'small' },
             fries:   { emoji: '🍟', score: 15,  probability: 20, speed: 3, color: '#F9CA24', size: 'small' },
@@ -117,7 +327,6 @@
             bomb:    { emoji: '💣', score: -1,  probability: 5,  speed: 4, color: '#636E72', size: 'danger' }
         };
 
-        // 🏆 등급 시스템
         const GRADES = [
             { min: 1000, grade: '👑', title: '전설의 대식가', message: '먹방의 신이 강림했다!', color: '#FFD700' },
             { min: 500, grade: '🥇', title: '먹방 스타', message: '대단해!', color: '#FFD700' },
@@ -125,10 +334,9 @@
             { min: 0,   grade: '🥉', title: '배고픈 초보', message: '더 열심히 먹어보자!', color: '#CD7F32' }
         ];
 
-        // 레벨 시스템
-        const LEVEL_SCORES = [0, 100, 250, 450, 700]; // 레벨업 필요 점수
+        const LEVEL_SCORES = [0, 100, 250, 450, 700];
 
-        // 📦 게임 상태 변수
+        // 게임 상태 변수
         let gameState = 'start';
         let score = 0;
         let life = 3;
@@ -142,22 +350,19 @@
         let lastSecondTime = 0;
         let rainbowOffset = 0;
 
-        // 콤보 시스템
         let combo = 0;
         let lastEatTime = 0;
-        let comboTimeout = 1500; // 1.5초 내에 먹어야 콤보 유지
+        let comboTimeout = 1500;
         let maxCombo = 0;
 
-        // 레벨 시스템
         let level = 1;
         let levelUpEffect = 0;
         let showLevelUp = false;
 
-        // 버튼 영역
         let startBtn, quitBtn, restartBtn, quitBtnGame;
 
         // ============================================
-        // 🎬 p5.js 기본 함수
+        // p5.js 기본 함수
         // ============================================
 
         function setup() {
@@ -166,7 +371,6 @@
             textAlign(CENTER, CENTER);
             playerX = width / 2;
 
-            // 배경 별 생성
             for (let i = 0; i < 30; i++) {
                 stars.push({
                     x: random(width),
@@ -176,7 +380,6 @@
                 });
             }
 
-            // 구름 생성
             for (let i = 0; i < 5; i++) {
                 clouds.push({
                     x: random(width),
@@ -186,7 +389,6 @@
                 });
             }
 
-            // 버튼 위치 설정
             startBtn = { x: width/2, y: height/2 + 20, w: 200, h: 60 };
             quitBtn = { x: width/2, y: height/2 + 100, w: 200, h: 50 };
             restartBtn = { x: width/2, y: height - 150, w: 200, h: 60 };
@@ -213,14 +415,13 @@
         }
 
         // ============================================
-        // ✨ 파티클 시스템
+        // 파티클 시스템
         // ============================================
 
         function createParticles(x, y, color, count, type = 'normal') {
             for (let i = 0; i < count; i++) {
                 particles.push({
-                    x: x,
-                    y: y,
+                    x: x, y: y,
                     vx: random(-6, 6),
                     vy: random(-10, -3),
                     size: random(8, 20),
@@ -240,16 +441,11 @@
             }
 
             particles.push({
-                x: x,
-                y: y,
-                vx: 0,
-                vy: -3,
+                x: x, y: y, vx: 0, vy: -3,
                 size: isCombo ? 28 : 24,
                 color: isCombo ? '#FF69B4' : (points > 0 ? '#FFD700' : '#FF6B6B'),
-                life: 1,
-                decay: 0.015,
-                text: displayText,
-                isText: true,
+                life: 1, decay: 0.015,
+                text: displayText, isText: true,
                 scale: isCombo ? 1.5 : 1
             });
         }
@@ -257,16 +453,10 @@
         function createLevelUpEffect() {
             showLevelUp = true;
             levelUpEffect = 60;
+            playSound('levelUp');
 
-            // 화려한 파티클
             for (let i = 0; i < 50; i++) {
-                createParticles(
-                    random(width),
-                    random(height/2),
-                    COLORS.rainbow[floor(random(6))],
-                    1,
-                    'star'
-                );
+                createParticles(random(width), random(height/2), COLORS.rainbow[floor(random(6))], 1, 'star');
             }
         }
 
@@ -277,10 +467,7 @@
                 p.y += p.vy;
                 p.vy += 0.15;
                 p.life -= p.decay;
-
-                if (p.life <= 0) {
-                    particles.splice(i, 1);
-                }
+                if (p.life <= 0) particles.splice(i, 1);
             }
         }
 
@@ -301,13 +488,12 @@
         }
 
         // ============================================
-        // 🌈 밝은 배경 그리기
+        // 배경 그리기
         // ============================================
 
         function drawBrightBackground() {
             let theme = LEVEL_THEMES[min(level - 1, LEVEL_THEMES.length - 1)];
 
-            // 밝은 그라데이션 배경
             for (let i = 0; i < height; i++) {
                 let inter = map(i, 0, height, 0, 1);
                 let c1 = color(theme.bg1);
@@ -323,13 +509,10 @@
                 line(0, i, width, i);
             }
 
-            // 구름 그리기
             noStroke();
             for (let cloud of clouds) {
                 cloud.x += cloud.speed;
-                if (cloud.x > width + cloud.size) {
-                    cloud.x = -cloud.size;
-                }
+                if (cloud.x > width + cloud.size) cloud.x = -cloud.size;
 
                 fill(255, 255, 255, 200);
                 ellipse(cloud.x, cloud.y, cloud.size, cloud.size * 0.6);
@@ -337,13 +520,10 @@
                 ellipse(cloud.x + cloud.size * 0.3, cloud.y + 5, cloud.size * 0.7, cloud.size * 0.5);
             }
 
-            // 반짝이는 별 (밝게)
             for (let star of stars) {
                 let brightness = (sin(frameCount * star.twinkle) + 1) / 2;
                 fill(255, 255, 200, brightness * 255);
                 noStroke();
-
-                // 별 모양
                 push();
                 translate(star.x, star.y);
                 for (let j = 0; j < 4; j++) {
@@ -365,7 +545,7 @@
         }
 
         // ============================================
-        // 🎮 게임 로직 함수
+        // 게임 로직
         // ============================================
 
         function startGame() {
@@ -383,10 +563,12 @@
             lastSpawnTime = millis();
             lastSecondTime = millis();
             lastEatTime = 0;
+
+            playSound('start');
+            startBGM();
         }
 
         function updateGame() {
-            // 레벨업 체크
             let newLevel = 1;
             for (let i = LEVEL_SCORES.length - 1; i >= 0; i--) {
                 if (score >= LEVEL_SCORES[i]) {
@@ -399,41 +581,31 @@
                 createLevelUpEffect();
             }
 
-            // 레벨업 이펙트 감소
             if (levelUpEffect > 0) {
                 levelUpEffect--;
-                if (levelUpEffect === 0) {
-                    showLevelUp = false;
-                }
+                if (levelUpEffect === 0) showLevelUp = false;
             }
 
-            // 콤보 타임아웃 체크
             if (combo > 0 && millis() - lastEatTime > comboTimeout) {
                 combo = 0;
             }
 
-            // ⏱️ 타이머 업데이트
             if (millis() - lastSecondTime >= 1000) {
                 timeLeft--;
                 lastSecondTime = millis();
                 if (timeLeft <= 0) {
                     gameState = 'gameover';
+                    stopBGM();
+                    playSound('gameOver');
                     createParticles(width/2, height/2, '#FFD700', 40, 'star');
                     return;
                 }
             }
 
-            // 🎹 키보드 입력 처리
-            if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) {
-                playerX -= PLAYER_SPEED;
-            }
-            if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) {
-                playerX += PLAYER_SPEED;
-            }
-
+            if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) playerX -= PLAYER_SPEED;
+            if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) playerX += PLAYER_SPEED;
             playerX = constrain(playerX, PLAYER_SIZE/2, width - PLAYER_SIZE/2);
 
-            // 🍕 아이템 생성 (레벨에 따라 빨라짐)
             let spawnInterval = SPAWN_INTERVAL_BASE - (level - 1) * 80;
             spawnInterval = max(spawnInterval, 400);
 
@@ -442,40 +614,49 @@
                 lastSpawnTime = millis();
             }
 
-            // 📦 아이템 업데이트 및 충돌 감지
             for (let i = items.length - 1; i >= 0; i--) {
                 let item = items[i];
-
-                // 아이템 이동 (레벨에 따라 빨라짐)
                 let speedBonus = 1 + (level - 1) * 0.15;
                 item.y += item.speed * speedBonus;
                 item.wobble += 0.12;
                 item.displayX = item.x + sin(item.wobble) * 8;
                 item.rotation += 0.05;
 
-                // 충돌 감지
                 if (checkCollision(item)) {
                     if (item.type === 'bomb') {
                         life--;
-                        combo = 0; // 콤보 리셋
+                        combo = 0;
+                        playSound('bomb');
                         createParticles(item.displayX, item.y, '#FF6B6B', 20);
                         createScorePopup(item.displayX, item.y, -1);
                         if (life <= 0) {
                             gameState = 'gameover';
+                            stopBGM();
+                            playSound('gameOver');
                             return;
                         }
                     } else {
-                        // 콤보 증가
                         combo++;
                         lastEatTime = millis();
                         if (combo > maxCombo) maxCombo = combo;
 
-                        // 콤보 보너스 점수
-                        let comboMultiplier = 1 + (combo - 1) * 0.2; // 콤보당 20% 추가
+                        let comboMultiplier = 1 + (combo - 1) * 0.2;
                         let earnedScore = floor(item.score * comboMultiplier);
                         score += earnedScore;
 
-                        // 아이템 크기별 이펙트
+                        // 사운드 효과
+                        if (item.itemSize === 'special') {
+                            playSound('star');
+                        } else if (item.itemSize === 'large') {
+                            playSound('eatBig');
+                        } else {
+                            playSound('eat');
+                        }
+
+                        if (combo > 1 && combo % 3 === 0) {
+                            playSound('combo');
+                        }
+
                         let particleCount = item.itemSize === 'small' ? 8 :
                                            item.itemSize === 'medium' ? 15 :
                                            item.itemSize === 'large' ? 25 : 30;
@@ -488,9 +669,7 @@
                     continue;
                 }
 
-                if (item.y > height + ITEM_SIZE) {
-                    items.splice(i, 1);
-                }
+                if (item.y > height + ITEM_SIZE) items.splice(i, 1);
             }
         }
 
@@ -498,7 +677,6 @@
             let itemType = getRandomItemType();
             let itemData = ITEM_TYPES[itemType];
 
-            // 아이템 크기별 실제 크기
             let actualSize = ITEM_SIZE;
             if (itemData.size === 'small') actualSize = ITEM_SIZE * 0.8;
             else if (itemData.size === 'medium') actualSize = ITEM_SIZE;
@@ -524,12 +702,9 @@
         function getRandomItemType() {
             let rand = random(100);
             let cumulative = 0;
-
             for (let type in ITEM_TYPES) {
                 cumulative += ITEM_TYPES[type].probability;
-                if (rand < cumulative) {
-                    return type;
-                }
+                if (rand < cumulative) return type;
             }
             return 'pizza';
         }
@@ -545,10 +720,8 @@
             let itemTop = item.y - item.actualSize/2;
             let itemBottom = item.y + item.actualSize/2;
 
-            return playerRight > itemLeft &&
-                   playerLeft < itemRight &&
-                   playerBottom > itemTop &&
-                   playerTop < itemBottom;
+            return playerRight > itemLeft && playerLeft < itemRight &&
+                   playerBottom > itemTop && playerTop < itemBottom;
         }
 
         function getGrade() {
@@ -559,14 +732,13 @@
         }
 
         // ============================================
-        // 🎨 화면 그리기 함수
+        // 화면 그리기
         // ============================================
 
         function drawStartScreen() {
             drawBrightBackground();
             drawRainbowBorder();
 
-            // 떠다니는 음식 이모지
             textSize(45);
             for (let i = 0; i < 8; i++) {
                 let x = (frameCount * 0.5 + i * 60) % (width + 100) - 50;
@@ -575,7 +747,6 @@
                 text(emojis[i], x, y);
             }
 
-            // 타이틀 (무지개 효과)
             textSize(52);
             strokeWeight(4);
             stroke(0, 0, 0, 100);
@@ -588,24 +759,18 @@
             fill(255);
             text('🍔 먹방 게임 🍕', width/2, height/4);
 
-            // 부제목
             textSize(18);
             fill(80);
             text('음식을 먹고 폭탄을 피해라!', width/2, height/4 + 60);
 
-            // 시작 버튼
             drawFancyButton('🎮 게임 시작', startBtn.x, startBtn.y, startBtn.w, startBtn.h, '#4ECDC4', '#26DE81');
-
-            // 종료 버튼
             drawFancyButton('🚪 종료', quitBtn.x, quitBtn.y, quitBtn.w, quitBtn.h, '#FF6B6B', '#EE5A24');
 
-            // 조작법
             textSize(16);
             fill(80);
             text('← → 방향키 또는 A D 키로 이동', width/2, height - 100);
-            text('SPACE 또는 버튼 클릭으로 시작', width/2, height - 75);
+            text('🎵 🔊 버튼으로 음악/효과음 ON/OFF', width/2, height - 75);
 
-            // 아이템 설명
             textSize(13);
             fill(100);
             text('🍕+10  🍟+15  🍔+25  🍗+40  🎂+60  ⭐+100', width/2, height - 45);
@@ -655,10 +820,8 @@
         function drawGame() {
             drawBrightBackground();
 
-            // 레벨 테마에 맞는 밝은 바닥
             let theme = LEVEL_THEMES[min(level - 1, LEVEL_THEMES.length - 1)];
 
-            // 잔디/바닥 그라데이션
             for (let i = 0; i < 60; i++) {
                 let inter = map(i, 0, 60, 0, 1);
                 let groundColor = lerpColor(color(theme.ground), color(100, 200, 100), inter * 0.3);
@@ -666,24 +829,19 @@
                 line(0, height - 60 + i, width, height - 60 + i);
             }
 
-            // 바닥 하이라이트
             stroke(255, 255, 255, 100);
             strokeWeight(3);
             line(0, height - 60, width, height - 60);
 
-            // 아이템 그리기 (선명하게)
             for (let item of items) {
-                // 아이템 그림자
                 fill(0, 0, 0, 80);
                 noStroke();
                 ellipse(item.displayX + 3, item.y + 3, item.actualSize * 0.7);
 
-                // 아이템 배경 글로우
                 let glowColor = color(item.color);
                 fill(red(glowColor), green(glowColor), blue(glowColor), 100);
                 ellipse(item.displayX, item.y, item.actualSize * 1.2);
 
-                // 아이템 이모지 (선명하게)
                 push();
                 translate(item.displayX, item.y);
                 rotate(sin(item.wobble) * 0.15);
@@ -692,36 +850,24 @@
                 pop();
             }
 
-            // 플레이어 그리기
             drawPlayer();
-
-            // HUD 그리기
             drawHUD();
-
-            // 파티클
             drawParticles();
 
-            // 레벨업 이펙트
-            if (showLevelUp) {
-                drawLevelUpText();
-            }
+            if (showLevelUp) drawLevelUpText();
         }
 
         function drawPlayer() {
-            // 플레이어 그림자
             fill(0, 0, 0, 80);
             noStroke();
             ellipse(playerX + 4, height - 96, PLAYER_SIZE * 0.7);
 
-            // 플레이어 글로우
             fill(255, 220, 100, 100);
             ellipse(playerX, height - 100, PLAYER_SIZE * 1.3);
 
-            // 플레이어 (크고 선명하게)
             textSize(PLAYER_SIZE);
             text('😋', playerX, height - 100);
 
-            // 플레이어 플랫폼 (밝은 색상)
             for (let i = 0; i < 15; i++) {
                 let inter = map(i, 0, 15, 0, 1);
                 let c = lerpColor(color('#6C5CE7'), color('#A29BFE'), inter);
@@ -730,25 +876,21 @@
                 rect(playerX - 40 + i * 0.5, height - 60 + i, 80 - i, 3, 5);
             }
 
-            // 플랫폼 빛 효과
             fill(255, 255, 255, 150);
             rect(playerX - 35, height - 60, 70, 4, 3);
         }
 
         function drawHUD() {
-            // HUD 배경 (반투명)
             noStroke();
             fill(255, 255, 255, 180);
             rect(0, 0, width, 70, 0, 0, 15, 15);
 
-            // HUD 하단 그림자
             fill(0, 0, 0, 30);
             rect(0, 65, width, 5);
 
             textSize(18);
             noStroke();
 
-            // 시간
             let timeColor = timeLeft > 10 ? color('#2ECC71') : color('#E74C3C');
             if (timeLeft <= 10) {
                 timeColor = lerpColor(color('#E74C3C'), color('#F39C12'), (sin(frameCount * 0.3) + 1) / 2);
@@ -757,19 +899,16 @@
             textAlign(LEFT, CENTER);
             text('⏱️ ' + timeLeft + '초', 15, 22);
 
-            // 레벨
             let theme = LEVEL_THEMES[min(level - 1, LEVEL_THEMES.length - 1)];
             fill(100);
             textSize(14);
             text('Lv.' + level + ' ' + theme.name, 15, 48);
 
-            // 점수 (중앙, 크게)
             fill('#E67E22');
             textAlign(CENTER, CENTER);
             textSize(22);
             text('🏆 ' + score + '점', width/2, 22);
 
-            // 콤보 표시
             if (combo > 1) {
                 let comboScale = 1 + sin(frameCount * 0.3) * 0.1;
                 textSize(16 * comboScale);
@@ -777,17 +916,13 @@
                 text('🔥 ' + combo + ' COMBO!', width/2, 48);
             }
 
-            // 목숨
             textSize(20);
             fill('#E74C3C');
             textAlign(RIGHT, CENTER);
             let hearts = '';
-            for (let i = 0; i < 3; i++) {
-                hearts += i < life ? '❤️' : '🖤';
-            }
+            for (let i = 0; i < 3; i++) hearts += i < life ? '❤️' : '🖤';
             text(hearts, width - 60, 35);
 
-            // 종료 버튼
             drawSmallButton('✕', quitBtnGame.x, quitBtnGame.y, 40, 30);
         }
 
@@ -811,7 +946,6 @@
 
             textAlign(CENTER, CENTER);
 
-            // 글로우 효과
             for (let i = 5; i > 0; i--) {
                 fill(255, 215, 0, alpha * 0.3);
                 textSize(50 * scale + i * 5);
@@ -835,14 +969,12 @@
             rect(0, 0, width, height);
 
             if (frameCount % 8 === 0) {
-                createParticles(random(width), random(height/2),
-                    COLORS.rainbow[floor(random(6))], 2, 'star');
+                createParticles(random(width), random(height/2), COLORS.rainbow[floor(random(6))], 2, 'star');
             }
             drawParticles();
 
             let grade = getGrade();
 
-            // GAME OVER
             textAlign(CENTER, CENTER);
             textSize(40);
             stroke(0, 0, 0, 150);
@@ -851,39 +983,30 @@
             text('GAME OVER', width/2, height/8);
             noStroke();
 
-            // 등급
             let gradeScale = 1 + sin(frameCount * 0.1) * 0.1;
             textSize(70 * gradeScale);
             text(grade.grade, width/2, height/4 + 20);
 
-            // 칭호
             textSize(26);
             fill(grade.color);
             text(grade.title, width/2, height/3 + 30);
 
-            // 점수
             textSize(22);
             fill(255);
             text('최종 점수: ' + score + '점', width/2, height/2 - 20);
 
-            // 최고 콤보
             textSize(18);
             fill('#FF69B4');
             text('최고 콤보: ' + maxCombo + ' COMBO', width/2, height/2 + 10);
 
-            // 도달 레벨
             fill('#4ECDC4');
             text('도달 레벨: Lv.' + level, width/2, height/2 + 35);
 
-            // 메시지
             textSize(16);
             fill(220);
             text('"' + grade.message + '"', width/2, height/2 + 70);
 
-            // 다시하기 버튼
             drawFancyButton('🔄 다시 하기', restartBtn.x, restartBtn.y, restartBtn.w, restartBtn.h, '#4ECDC4', '#26DE81');
-
-            // 종료 버튼
             drawFancyButton('🚪 종료', width/2, height - 80, 200, 50, '#FF6B6B', '#EE5A24');
 
             textSize(14);
@@ -892,21 +1015,25 @@
         }
 
         // ============================================
-        // 🎹 입력 처리 함수
+        // 입력 처리
         // ============================================
 
         function keyPressed() {
-            if (key === ' ') {
-                handleStart();
-            }
+            if (key === ' ') handleStart();
             if (key === 'Escape' || key === 'q' || key === 'Q') {
                 if (gameState === 'playing') {
                     gameState = 'start';
+                    stopBGM();
                 }
             }
+            if (key === 'm' || key === 'M') toggleBGM();
+            if (key === 'n' || key === 'N') toggleSFX();
         }
 
         function mousePressed() {
+            // 오디오 초기화 (첫 클릭 시)
+            initAudio();
+
             if (gameState === 'start') {
                 if (isInsideButton(startBtn)) {
                     startGame();
@@ -920,6 +1047,7 @@
             else if (gameState === 'playing') {
                 if (isInsideButton(quitBtnGame)) {
                     gameState = 'start';
+                    stopBGM();
                     return;
                 }
             }
@@ -946,9 +1074,7 @@
         function handleStart() {
             if (gameState === 'start' || gameState === 'gameover') {
                 if (gameState === 'start') {
-                    if (!isInsideButton(quitBtn)) {
-                        startGame();
-                    }
+                    if (!isInsideButton(quitBtn)) startGame();
                 } else {
                     startGame();
                 }
