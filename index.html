@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🍔 먹방 게임 - 픽셀아트</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #1a1a2e;
+            min-height: 100vh;
+            font-family: 'Press Start 2P', monospace;
+            image-rendering: pixelated;
+        }
+        h1 {
+            color: #ffd700;
+            text-shadow: 4px 4px 0px #ff6b6b;
+            margin-bottom: 10px;
+            font-size: 1.5em;
+            font-family: 'Press Start 2P', monospace;
+        }
+        #game-container {
+            border: 8px solid #4a4a4a;
+            box-shadow: 0 0 0 4px #2a2a2a, 8px 8px 0 0 #000;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        .info {
+            color: #aaa;
+            margin-top: 15px;
+            text-align: center;
+            font-size: 10px;
+            font-family: 'Press Start 2P', monospace;
+        }
+        .sound-controls {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+        .sound-btn {
+            background: #4a4a4a;
+            border: 4px solid #2a2a2a;
+            width: 40px;
+            height: 40px;
+            font-size: 16px;
+            cursor: pointer;
+            font-family: 'Press Start 2P', monospace;
+            color: white;
+        }
+        .sound-btn:hover {
+            background: #6a6a6a;
+        }
+        .sound-btn.muted {
+            opacity: 0.4;
+        }
+    </style>
+</head>
+<body>
+    <div class="sound-controls">
+        <button class="sound-btn" id="bgmBtn" onclick="toggleBGM()">♪</button>
+        <button class="sound-btn" id="sfxBtn" onclick="toggleSFX()">♫</button>
+    </div>
+    <h1>MUKBANG GAME</h1>
+    <div id="game-container"></div>
+    <div class="info">
+        <p>ARROW KEYS or A/D to MOVE</p>
+    </div>
+
+    <script>
+        // ============================================
+        // 🎮 먹방 게임 - 픽셀아트 버전
+        // ============================================
+
+        const PIXEL_SIZE = 4; // 기본 픽셀 크기
+        const CANVAS_WIDTH = 400;
+        const CANVAS_HEIGHT = 600;
+        const PLAYER_SIZE = 48;
+        const PLAYER_SPEED = 8;
+        const ITEM_SIZE = 32;
+        const GAME_TIME = 60;
+        const SPAWN_INTERVAL_BASE = 800;
+
+        // 픽셀아트 색상 팔레트
+        const PALETTE = {
+            black: '#1a1a2e',
+            darkGray: '#2d2d44',
+            gray: '#4a4a6a',
+            lightGray: '#8888aa',
+            white: '#ffffff',
+            red: '#ff4757',
+            darkRed: '#c0392b',
+            orange: '#ff9f43',
+            yellow: '#ffd700',
+            darkYellow: '#d4a017',
+            green: '#2ed573',
+            darkGreen: '#17a05e',
+            blue: '#3498db',
+            darkBlue: '#2980b9',
+            purple: '#9b59b6',
+            pink: '#fd79a8',
+            brown: '#8b4513',
+            darkBrown: '#5d3a1a',
+            skin: '#ffcc99',
+            darkSkin: '#dda66b'
+        };
+
+        // 레벨별 테마 및 의상
+        const LEVEL_THEMES = [
+            {
+                sky: '#87ceeb', grass: '#2ed573', name: 'GRASSLAND',
+                costume: { hair: '#8b4513', shirt: '#3498db', shirtDark: '#2980b9', accessory: 'none' },
+                reward: '기본 의상'
+            },
+            {
+                sky: '#ff9f43', grass: '#f4d03f', name: 'DESERT',
+                costume: { hair: '#d4a017', shirt: '#27ae60', shirtDark: '#1e8449', accessory: 'hat' },
+                reward: '탐험가 모자'
+            },
+            {
+                sky: '#9b59b6', grass: '#8e44ad', name: 'MAGIC LAND',
+                costume: { hair: '#e056fd', shirt: '#9b59b6', shirtDark: '#7d3c98', accessory: 'wizard' },
+                reward: '마법사 로브'
+            },
+            {
+                sky: '#3498db', grass: '#1abc9c', name: 'OCEAN',
+                costume: { hair: '#00cec9', shirt: '#00b894', shirtDark: '#019875', accessory: 'goggles' },
+                reward: '다이버 고글'
+            },
+            {
+                sky: '#ffd700', grass: '#ff6b6b', name: 'VOLCANO',
+                costume: { hair: '#ffd700', shirt: '#e74c3c', shirtDark: '#c0392b', accessory: 'crown' },
+                reward: '전설의 왕관'
+            }
+        ];
+
+        const LEVEL_SCORES = [0, 150, 350, 600, 900];
+
+        // 사운드 시스템
+        let audioContext;
+        let bgmEnabled = true;
+        let sfxEnabled = true;
+        let bgmPlaying = false;
+        let bgmNoteIndex = 0;
+        let bgmInterval = null;
+
+        const BGM_MELODY = [
+            { note: 523.25, duration: 150 },
+            { note: 587.33, duration: 150 },
+            { note: 659.25, duration: 150 },
+            { note: 523.25, duration: 150 },
+            { note: 783.99, duration: 300 },
+            { note: 659.25, duration: 150 },
+            { note: 523.25, duration: 300 },
+        ];
+
+        // 게임 상태
+        let gameState = 'start';
+        let score = 0;
+        let life = 3;
+        let timeLeft = GAME_TIME;
+        let playerX;
+        let items = [];
+        let particles = [];
+        let lastSpawnTime = 0;
+        let lastSecondTime = 0;
+        let combo = 0;
+        let lastEatTime = 0;
+        let maxCombo = 0;
+        let level = 1;
+        let levelUpEffect = 0;
+        let showLevelUp = false;
+        let frameCounter = 0;
+
+        // 아이템 타입
+        const ITEM_TYPES = {
+            pizza:   { score: 10,  probability: 35, speed: 3, size: 'small' },
+            fries:   { score: 15,  probability: 20, speed: 3, size: 'small' },
+            burger:  { score: 25,  probability: 20, speed: 4, size: 'medium' },
+            chicken: { score: 40,  probability: 12, speed: 4, size: 'medium' },
+            cake:    { score: 60,  probability: 5,  speed: 5, size: 'large' },
+            star:    { score: 100, probability: 3,  speed: 5, size: 'special' },
+            bomb:    { score: -1,  probability: 5,  speed: 4, size: 'danger' }
+        };
+
+        const GRADES = [
+            { min: 1000, title: 'LEGENDARY', color: PALETTE.yellow },
+            { min: 500, title: 'MASTER', color: PALETTE.orange },
+            { min: 200, title: 'PRO', color: PALETTE.green },
+            { min: 0, title: 'NEWBIE', color: PALETTE.gray }
+        ];
+
+        // ============================================
+        // 오디오 시스템
+        // ============================================
+
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioContext.state === 'suspended') audioContext.resume();
+        }
+
+        function playSound(type) {
+            if (!sfxEnabled) return;
+            initAudio();
+
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            osc.connect(gain);
+            gain.connect(audioContext.destination);
+            osc.type = 'square'; // 8비트 사운드
+
+            switch(type) {
+                case 'eat':
+                    osc.frequency.setValueAtTime(800, audioContext.currentTime);
+                    osc.frequency.setValueAtTime(1200, audioContext.currentTime + 0.05);
+                    gain.gain.setValueAtTime(0.2, audioContext.currentTime);
+                    gain.gain.setValueAtTime(0, audioContext.currentTime + 0.1);
+                    osc.start(); osc.stop(audioContext.currentTime + 0.1);
+                    break;
+                case 'eatBig':
+                    osc.frequency.setValueAtTime(600, audioContext.currentTime);
+                    osc.frequency.setValueAtTime(900, audioContext.currentTime + 0.05);
+                    osc.frequency.setValueAtTime(1200, audioContext.currentTime + 0.1);
+                    gain.gain.setValueAtTime(0.25, audioContext.currentTime);
+                    gain.gain.setValueAtTime(0, audioContext.currentTime + 0.15);
+                    osc.start(); osc.stop(audioContext.currentTime + 0.15);
+                    break;
+                case 'star':
+                    playArpeggio([1047, 1319, 1568, 2093], 0.06);
+                    break;
+                case 'bomb':
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(150, audioContext.currentTime);
+                    osc.frequency.setValueAtTime(50, audioContext.currentTime + 0.2);
+                    gain.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    gain.gain.setValueAtTime(0, audioContext.currentTime + 0.25);
+                    osc.start(); osc.stop(audioContext.currentTime + 0.25);
+                    break;
+                case 'levelUp':
+                    playArpeggio([523, 659, 784, 1047], 0.1);
+                    break;
+                case 'gameOver':
+                    osc.frequency.setValueAtTime(400, audioContext.currentTime);
+                    osc.frequency.setValueAtTime(200, audioContext.currentTime + 0.2);
+                    osc.frequency.setValueAtTime(100, audioContext.currentTime + 0.4);
+                    gain.gain.setValueAtTime(0.2, audioContext.currentTime);
+                    gain.gain.setValueAtTime(0, audioContext.currentTime + 0.5);
+                    osc.start(); osc.stop(audioContext.currentTime + 0.5);
+                    break;
+                case 'start':
+                    playArpeggio([523, 659, 784], 0.08);
+                    break;
+            }
+        }
+
+        function playArpeggio(notes, interval) {
+            notes.forEach((freq, i) => {
+                setTimeout(() => {
+                    if (!sfxEnabled) return;
+                    const o = audioContext.createOscillator();
+                    const g = audioContext.createGain();
+                    o.connect(g); g.connect(audioContext.destination);
+                    o.type = 'square';
+                    o.frequency.value = freq;
+                    g.gain.setValueAtTime(0.15, audioContext.currentTime);
+                    g.gain.setValueAtTime(0, audioContext.currentTime + 0.1);
+                    o.start(); o.stop(audioContext.currentTime + 0.1);
+                }, i * interval * 1000);
+            });
+        }
+
+        function startBGM() {
+            if (!bgmEnabled || bgmPlaying) return;
+            initAudio();
+            bgmPlaying = true;
+
+            function playNote() {
+                if (!bgmPlaying || !bgmEnabled) return;
+                const note = BGM_MELODY[bgmNoteIndex];
+                const o = audioContext.createOscillator();
+                const g = audioContext.createGain();
+                o.connect(g); g.connect(audioContext.destination);
+                o.type = 'square';
+                o.frequency.value = note.note;
+                g.gain.setValueAtTime(0.08, audioContext.currentTime);
+                g.gain.setValueAtTime(0, audioContext.currentTime + note.duration / 1000 * 0.8);
+                o.start(); o.stop(audioContext.currentTime + note.duration / 1000);
+                bgmNoteIndex = (bgmNoteIndex + 1) % BGM_MELODY.length;
+                bgmInterval = setTimeout(playNote, note.duration);
+            }
+            playNote();
+        }
+
+        function stopBGM() {
+            bgmPlaying = false;
+            if (bgmInterval) { clearTimeout(bgmInterval); bgmInterval = null; }
+        }
+
+        function toggleBGM() {
+            bgmEnabled = !bgmEnabled;
+            document.getElementById('bgmBtn').classList.toggle('muted', !bgmEnabled);
+            if (bgmEnabled && gameState === 'playing') startBGM();
+            else stopBGM();
+        }
+
+        function toggleSFX() {
+            sfxEnabled = !sfxEnabled;
+            document.getElementById('sfxBtn').classList.toggle('muted', !sfxEnabled);
+        }
+
+        // ============================================
+        // 픽셀 그리기 함수들
+        // ============================================
+
+        function drawPixelRect(x, y, w, h, col) {
+            noStroke();
+            fill(col);
+            rect(x, y, w, h);
+        }
+
+        function drawPixelText(txt, x, y, size, col) {
+            textFont('Press Start 2P');
+            textSize(size);
+            textAlign(CENTER, CENTER);
+            noStroke();
+            // 그림자
+            fill(0, 0, 0, 150);
+            text(txt, x + 2, y + 2);
+            fill(col);
+            text(txt, x, y);
+        }
+
+        // 픽셀 플레이어 그리기 (레벨별 의상)
+        function drawPixelPlayer(x, y, playerLevel) {
+            const lvl = playerLevel || level;
+            const theme = LEVEL_THEMES[min(lvl - 1, LEVEL_THEMES.length - 1)];
+            const costume = theme.costume;
+
+            const px = x - 24;
+            const py = y - 24;
+
+            // 악세서리 (뒤에 그리기)
+            if (costume.accessory === 'wizard') {
+                // 마법사 망토
+                drawPixelRect(px + 4, py + 32, 8, 20, costume.shirt);
+                drawPixelRect(px + 36, py + 32, 8, 20, costume.shirt);
+            }
+
+            // 머리 (피부색)
+            drawPixelRect(px + 8, py + 4, 32, 28, PALETTE.skin);
+
+            // 머리카락 (레벨별 색상)
+            drawPixelRect(px + 8, py, 32, 12, costume.hair);
+            drawPixelRect(px + 4, py + 4, 4, 16, costume.hair);
+            drawPixelRect(px + 40, py + 4, 4, 16, costume.hair);
+
+            // 악세서리 (앞에 그리기)
+            if (costume.accessory === 'hat') {
+                // 탐험가 모자
+                drawPixelRect(px + 4, py - 8, 40, 8, '#8b4513');
+                drawPixelRect(px + 12, py - 16, 24, 12, '#a0522d');
+            } else if (costume.accessory === 'wizard') {
+                // 마법사 모자
+                drawPixelRect(px + 8, py - 8, 32, 8, costume.shirt);
+                drawPixelRect(px + 14, py - 20, 20, 16, costume.shirt);
+                drawPixelRect(px + 20, py - 28, 8, 12, costume.shirt);
+                // 별 장식
+                drawPixelRect(px + 22, py - 8, 4, 4, PALETTE.yellow);
+            } else if (costume.accessory === 'goggles') {
+                // 다이버 고글
+                drawPixelRect(px + 8, py + 8, 12, 8, '#2d3436');
+                drawPixelRect(px + 28, py + 8, 12, 8, '#2d3436');
+                drawPixelRect(px + 20, py + 10, 8, 4, '#2d3436');
+                drawPixelRect(px + 10, py + 10, 8, 4, '#74b9ff');
+                drawPixelRect(px + 30, py + 10, 8, 4, '#74b9ff');
+            } else if (costume.accessory === 'crown') {
+                // 왕관
+                drawPixelRect(px + 8, py - 12, 32, 12, PALETTE.yellow);
+                drawPixelRect(px + 8, py - 20, 8, 12, PALETTE.yellow);
+                drawPixelRect(px + 20, py - 24, 8, 16, PALETTE.yellow);
+                drawPixelRect(px + 32, py - 20, 8, 12, PALETTE.yellow);
+                // 보석
+                drawPixelRect(px + 10, py - 16, 4, 4, PALETTE.red);
+                drawPixelRect(px + 22, py - 20, 4, 4, PALETTE.red);
+                drawPixelRect(px + 34, py - 16, 4, 4, PALETTE.red);
+            }
+
+            // 눈
+            drawPixelRect(px + 12, py + 14, 8, 8, PALETTE.white);
+            drawPixelRect(px + 28, py + 14, 8, 8, PALETTE.white);
+            drawPixelRect(px + 14, py + 16, 4, 4, PALETTE.black);
+            drawPixelRect(px + 30, py + 16, 4, 4, PALETTE.black);
+
+            // 볼터치 (레벨 3 이상)
+            if (lvl >= 3) {
+                drawPixelRect(px + 8, py + 20, 4, 4, PALETTE.pink);
+                drawPixelRect(px + 36, py + 20, 4, 4, PALETTE.pink);
+            }
+
+            // 입 (크게 벌린)
+            drawPixelRect(px + 16, py + 24, 16, 8, PALETTE.darkRed);
+            drawPixelRect(px + 18, py + 26, 12, 4, PALETTE.red);
+
+            // 몸통 (레벨별 색상)
+            drawPixelRect(px + 12, py + 32, 24, 16, costume.shirt);
+            drawPixelRect(px + 16, py + 34, 16, 4, costume.shirtDark);
+
+            // 레벨 5 특수 효과 (반짝임)
+            if (lvl >= 5 && frameCounter % 20 < 10) {
+                drawPixelRect(px + 4, py - 4, 4, 4, PALETTE.yellow);
+                drawPixelRect(px + 40, py + 8, 4, 4, PALETTE.yellow);
+                drawPixelRect(px + 0, py + 24, 4, 4, PALETTE.yellow);
+            }
+        }
+
+        // 픽셀 피자
+        function drawPixelPizza(x, y) {
+            const px = x - 16, py = y - 16;
+            // 베이스
+            drawPixelRect(px + 8, py + 4, 16, 4, PALETTE.yellow);
+            drawPixelRect(px + 4, py + 8, 24, 4, PALETTE.yellow);
+            drawPixelRect(px, py + 12, 32, 16, PALETTE.yellow);
+            // 토핑
+            drawPixelRect(px + 8, py + 14, 6, 6, PALETTE.red);
+            drawPixelRect(px + 18, py + 16, 6, 6, PALETTE.red);
+            drawPixelRect(px + 12, py + 22, 6, 6, PALETTE.red);
+            // 크러스트
+            drawPixelRect(px, py + 28, 32, 4, PALETTE.darkYellow);
+        }
+
+        // 픽셀 햄버거
+        function drawPixelBurger(x, y) {
+            const px = x - 16, py = y - 16;
+            // 위 빵
+            drawPixelRect(px + 4, py, 24, 8, PALETTE.orange);
+            drawPixelRect(px + 8, py + 8, 16, 4, PALETTE.orange);
+            // 상추
+            drawPixelRect(px + 2, py + 12, 28, 4, PALETTE.green);
+            // 패티
+            drawPixelRect(px + 4, py + 16, 24, 8, PALETTE.brown);
+            // 치즈
+            drawPixelRect(px + 2, py + 24, 28, 4, PALETTE.yellow);
+            // 아래 빵
+            drawPixelRect(px + 4, py + 28, 24, 4, PALETTE.darkYellow);
+        }
+
+        // 픽셀 치킨
+        function drawPixelChicken(x, y) {
+            const px = x - 16, py = y - 16;
+            // 고기
+            drawPixelRect(px + 8, py, 16, 20, PALETTE.orange);
+            drawPixelRect(px + 4, py + 4, 24, 12, PALETTE.orange);
+            // 뼈
+            drawPixelRect(px + 12, py + 20, 8, 12, PALETTE.white);
+            drawPixelRect(px + 8, py + 28, 16, 4, PALETTE.lightGray);
+        }
+
+        // 픽셀 감자튀김
+        function drawPixelFries(x, y) {
+            const px = x - 12, py = y - 16;
+            // 박스
+            drawPixelRect(px, py + 12, 24, 20, PALETTE.red);
+            drawPixelRect(px + 2, py + 14, 20, 4, PALETTE.darkRed);
+            // 감자
+            drawPixelRect(px + 2, py, 4, 16, PALETTE.yellow);
+            drawPixelRect(px + 8, py + 2, 4, 14, PALETTE.yellow);
+            drawPixelRect(px + 14, py, 4, 16, PALETTE.yellow);
+            drawPixelRect(px + 20, py + 4, 4, 12, PALETTE.yellow);
+        }
+
+        // 픽셀 케이크
+        function drawPixelCake(x, y) {
+            const px = x - 16, py = y - 16;
+            // 초
+            drawPixelRect(px + 14, py, 4, 8, PALETTE.white);
+            drawPixelRect(px + 12, py - 4, 8, 4, PALETTE.orange);
+            // 위층
+            drawPixelRect(px + 4, py + 8, 24, 8, PALETTE.pink);
+            drawPixelRect(px + 4, py + 8, 24, 2, PALETTE.white);
+            // 아래층
+            drawPixelRect(px, py + 16, 32, 12, PALETTE.pink);
+            drawPixelRect(px, py + 16, 32, 2, PALETTE.white);
+            // 장식
+            drawPixelRect(px + 6, py + 20, 4, 4, PALETTE.red);
+            drawPixelRect(px + 22, py + 20, 4, 4, PALETTE.red);
+        }
+
+        // 픽셀 별
+        function drawPixelStar(x, y) {
+            const px = x - 16, py = y - 16;
+            fill(PALETTE.yellow);
+            noStroke();
+            // 별 모양
+            drawPixelRect(px + 12, py, 8, 8, PALETTE.yellow);
+            drawPixelRect(px + 8, py + 8, 16, 8, PALETTE.yellow);
+            drawPixelRect(px, py + 12, 32, 8, PALETTE.yellow);
+            drawPixelRect(px + 4, py + 20, 24, 4, PALETTE.yellow);
+            drawPixelRect(px + 4, py + 24, 8, 8, PALETTE.yellow);
+            drawPixelRect(px + 20, py + 24, 8, 8, PALETTE.yellow);
+        }
+
+        // 픽셀 폭탄
+        function drawPixelBomb(x, y) {
+            const px = x - 14, py = y - 16;
+            // 몸체
+            drawPixelRect(px + 4, py + 8, 20, 20, PALETTE.darkGray);
+            drawPixelRect(px + 8, py + 4, 12, 4, PALETTE.darkGray);
+            // 하이라이트
+            drawPixelRect(px + 8, py + 12, 4, 4, PALETTE.gray);
+            // 심지
+            drawPixelRect(px + 12, py, 4, 8, PALETTE.brown);
+            // 불꽃 (깜빡임)
+            if (frameCounter % 10 < 5) {
+                drawPixelRect(px + 10, py - 6, 8, 6, PALETTE.orange);
+                drawPixelRect(px + 12, py - 8, 4, 4, PALETTE.yellow);
+            }
+        }
+
+        // 아이템 그리기
+        function drawItem(item) {
+            const x = item.displayX;
+            const y = item.y;
+
+            switch(item.type) {
+                case 'pizza': drawPixelPizza(x, y); break;
+                case 'burger': drawPixelBurger(x, y); break;
+                case 'chicken': drawPixelChicken(x, y); break;
+                case 'fries': drawPixelFries(x, y); break;
+                case 'cake': drawPixelCake(x, y); break;
+                case 'star': drawPixelStar(x, y); break;
+                case 'bomb': drawPixelBomb(x, y); break;
+            }
+        }
+
+        // 하트 그리기
+        function drawPixelHeart(x, y, filled) {
+            const col = filled ? PALETTE.red : PALETTE.darkGray;
+            drawPixelRect(x, y + 4, 4, 8, col);
+            drawPixelRect(x + 12, y + 4, 4, 8, col);
+            drawPixelRect(x + 4, y, 4, 12, col);
+            drawPixelRect(x + 8, y, 4, 12, col);
+            drawPixelRect(x + 4, y + 12, 8, 4, col);
+        }
+
+        // ============================================
+        // p5.js 메인
+        // ============================================
+
+        function setup() {
+            let canvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+            canvas.parent('game-container');
+            noSmooth(); // 픽셀 선명하게
+            playerX = width / 2;
+        }
+
+        function draw() {
+            frameCounter++;
+
+            switch(gameState) {
+                case 'start': drawStartScreen(); break;
+                case 'playing': updateGame(); drawGame(); break;
+                case 'gameover': drawGameOverScreen(); break;
+            }
+
+            updateParticles();
+        }
+
+        // ============================================
+        // 게임 로직
+        // ============================================
+
+        function startGame() {
+            gameState = 'playing';
+            score = 0;
+            life = 3;
+            timeLeft = GAME_TIME;
+            playerX = width / 2;
+            items = [];
+            particles = [];
+            combo = 0;
+            maxCombo = 0;
+            level = 1;
+            showLevelUp = false;
+            lastSpawnTime = millis();
+            lastSecondTime = millis();
+            playSound('start');
+            startBGM();
+        }
+
+        function updateGame() {
+            // 레벨업 체크
+            let newLevel = 1;
+            for (let i = LEVEL_SCORES.length - 1; i >= 0; i--) {
+                if (score >= LEVEL_SCORES[i]) { newLevel = i + 1; break; }
+            }
+            if (newLevel > level) {
+                level = newLevel;
+                showLevelUp = true;
+                levelUpEffect = 90; // 더 긴 시간
+                playSound('levelUp');
+            }
+
+            if (levelUpEffect > 0) {
+                levelUpEffect--;
+                if (levelUpEffect === 0) showLevelUp = false;
+            }
+
+            if (combo > 0 && millis() - lastEatTime > 1500) combo = 0;
+
+            // 타이머
+            if (millis() - lastSecondTime >= 1000) {
+                timeLeft--;
+                lastSecondTime = millis();
+                if (timeLeft <= 0) {
+                    gameState = 'gameover';
+                    stopBGM();
+                    playSound('gameOver');
+                    return;
+                }
+            }
+
+            // 입력
+            if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) playerX -= PLAYER_SPEED;
+            if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) playerX += PLAYER_SPEED;
+            playerX = constrain(playerX, 30, width - 30);
+
+            // 아이템 생성
+            let spawnInterval = SPAWN_INTERVAL_BASE - (level - 1) * 80;
+            if (millis() - lastSpawnTime >= max(spawnInterval, 400)) {
+                spawnItem();
+                lastSpawnTime = millis();
+            }
+
+            // 아이템 업데이트
+            for (let i = items.length - 1; i >= 0; i--) {
+                let item = items[i];
+                item.y += item.speed * (1 + (level - 1) * 0.15);
+                item.wobble += 0.08;
+                item.displayX = item.x + sin(item.wobble) * 4;
+
+                if (checkCollision(item)) {
+                    if (item.type === 'bomb') {
+                        life--;
+                        combo = 0;
+                        playSound('bomb');
+                        createPixelExplosion(item.displayX, item.y, PALETTE.red);
+                        if (life <= 0) {
+                            gameState = 'gameover';
+                            stopBGM();
+                            playSound('gameOver');
+                            return;
+                        }
+                    } else {
+                        combo++;
+                        lastEatTime = millis();
+                        if (combo > maxCombo) maxCombo = combo;
+
+                        let earned = floor(item.score * (1 + (combo - 1) * 0.2));
+                        score += earned;
+
+                        if (item.type === 'star') playSound('star');
+                        else if (item.size === 'large') playSound('eatBig');
+                        else playSound('eat');
+
+                        createPixelExplosion(item.displayX, item.y, PALETTE.yellow);
+                        createScorePopup(item.displayX, item.y - 20, earned);
+                    }
+                    items.splice(i, 1);
+                    continue;
+                }
+
+                if (item.y > height + 40) items.splice(i, 1);
+            }
+        }
+
+        function spawnItem() {
+            let rand = random(100), cumulative = 0, type = 'pizza';
+            for (let t in ITEM_TYPES) {
+                cumulative += ITEM_TYPES[t].probability;
+                if (rand < cumulative) { type = t; break; }
+            }
+            let data = ITEM_TYPES[type];
+            items.push({
+                type: type,
+                score: data.score,
+                speed: data.speed,
+                size: data.size,
+                x: random(40, width - 40),
+                displayX: 0,
+                y: -40,
+                wobble: random(TWO_PI)
+            });
+        }
+
+        function checkCollision(item) {
+            return abs(playerX - item.displayX) < 36 && abs((height - 80) - item.y) < 36;
+        }
+
+        // 파티클
+        function createPixelExplosion(x, y, col) {
+            for (let i = 0; i < 8; i++) {
+                particles.push({
+                    x: x, y: y,
+                    vx: random(-4, 4),
+                    vy: random(-6, -2),
+                    size: random(4, 12),
+                    color: col,
+                    life: 1
+                });
+            }
+        }
+
+        function createScorePopup(x, y, points) {
+            particles.push({
+                x: x, y: y, vx: 0, vy: -1.5,
+                text: '+' + points,
+                color: PALETTE.yellow,
+                life: 1,
+                isText: true
+            });
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx || 0;
+                p.y += p.vy || 0;
+                if (!p.isText) p.vy += 0.3;
+                p.life -= 0.025;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        function drawParticles() {
+            for (let p of particles) {
+                if (p.isText) {
+                    drawPixelText(p.text, p.x, p.y, 12, p.color);
+                } else {
+                    let s = p.size * p.life;
+                    drawPixelRect(p.x - s/2, p.y - s/2, s, s, p.color);
+                }
+            }
+        }
+
+        // ============================================
+        // 화면 그리기
+        // ============================================
+
+        function drawStartScreen() {
+            let theme = LEVEL_THEMES[0];
+
+            // 배경
+            background(theme.sky);
+
+            // 구름
+            for (let i = 0; i < 5; i++) {
+                let cx = ((frameCounter * 0.3 + i * 100) % (width + 80)) - 40;
+                drawPixelRect(cx, 60 + i * 30, 48, 16, PALETTE.white);
+                drawPixelRect(cx + 8, 52 + i * 30, 32, 8, PALETTE.white);
+            }
+
+            // 바닥
+            for (let i = 0; i < width; i += 16) {
+                drawPixelRect(i, height - 60, 16, 60, theme.grass);
+                if ((i / 16) % 2 === 0) drawPixelRect(i, height - 60, 16, 8, PALETTE.darkGreen);
+            }
+
+            // 타이틀 박스
+            drawPixelRect(40, 50, 320, 70, PALETTE.darkGray);
+            drawPixelRect(44, 54, 312, 62, PALETTE.blue);
+            drawPixelText('MUKBANG', width/2, 72, 22, PALETTE.yellow);
+            drawPixelText('GAME', width/2, 98, 22, PALETTE.white);
+
+            // 레벨별 캐릭터 미리보기
+            drawPixelRect(20, 135, 360, 90, PALETTE.darkGray);
+            drawPixelRect(24, 139, 352, 82, '#2d3436');
+            drawPixelText('UNLOCK COSTUMES!', width/2, 152, 10, PALETTE.pink);
+
+            for (let i = 0; i < 5; i++) {
+                let cx = 55 + i * 72;
+                // 레벨 배경
+                let lvlTheme = LEVEL_THEMES[i];
+                drawPixelRect(cx - 28, 168, 56, 50, lvlTheme.costume.shirtDark);
+                drawPixelPlayer(cx, 195, i + 1);
+                drawPixelText('LV' + (i + 1), cx, 225, 8, PALETTE.white);
+            }
+
+            // 버튼
+            drawPixelButton('START', width/2, 270, 160, 45, PALETTE.green, PALETTE.darkGreen);
+            drawPixelButton('EXIT', width/2, 325, 140, 35, PALETTE.red, PALETTE.darkRed);
+
+            // 안내
+            drawPixelText('ARROW KEYS TO MOVE', width/2, 370, 9, PALETTE.white);
+            drawPixelText('EAT FOOD, AVOID BOMBS!', width/2, 385, 8, PALETTE.lightGray);
+
+            // 레벨 점수 안내
+            drawPixelRect(40, 405, 320, 55, PALETTE.darkGray);
+            drawPixelRect(44, 409, 312, 47, '#2d3436');
+            drawPixelText('LEVEL GOALS', width/2, 420, 10, PALETTE.yellow);
+            drawPixelText('LV2:150  LV3:350  LV4:600  LV5:900', width/2, 438, 8, PALETTE.lightGray);
+
+            // 점수표
+            drawPixelText('SCORE: PIZZA:10 BURGER:25 CHICKEN:40', width/2, 475, 7, PALETTE.yellow);
+            drawPixelText('FRIES:15  CAKE:60  STAR:100', width/2, 490, 7, PALETTE.orange);
+
+            // 현재 캐릭터 (움직이는)
+            let bobY = sin(frameCounter * 0.1) * 3;
+            drawPixelPlayer(width/2, height - 35 + bobY, 1);
+        }
+
+        function drawPixelButton(label, x, y, w, h, col, darkCol) {
+            drawPixelRect(x - w/2 + 4, y - h/2 + 4, w, h, PALETTE.black);
+            drawPixelRect(x - w/2, y - h/2, w, h, darkCol);
+            drawPixelRect(x - w/2 + 4, y - h/2 + 4, w - 8, h - 8, col);
+            drawPixelText(label, x, y, 14, PALETTE.white);
+        }
+
+        function drawGame() {
+            let theme = LEVEL_THEMES[min(level - 1, LEVEL_THEMES.length - 1)];
+
+            // 하늘
+            background(theme.sky);
+
+            // 구름
+            for (let i = 0; i < 4; i++) {
+                let cx = ((frameCounter * 0.2 + i * 120) % (width + 60)) - 30;
+                drawPixelRect(cx, 80 + i * 50, 40, 12, PALETTE.white);
+                drawPixelRect(cx + 6, 74 + i * 50, 28, 6, PALETTE.white);
+            }
+
+            // 땅
+            for (let i = 0; i < width; i += 16) {
+                drawPixelRect(i, height - 60, 16, 60, theme.grass);
+                if ((i / 16 + level) % 3 === 0) drawPixelRect(i, height - 60, 16, 8, PALETTE.darkGreen);
+            }
+
+            // 아이템
+            for (let item of items) drawItem(item);
+
+            // 플레이어 (현재 레벨 의상)
+            drawPixelPlayer(playerX, height - 80, level);
+
+            // 파티클
+            drawParticles();
+
+            // HUD
+            drawHUD();
+
+            // 레벨업
+            if (showLevelUp) drawLevelUpPopup();
+        }
+
+        function drawHUD() {
+            let theme = LEVEL_THEMES[min(level - 1, LEVEL_THEMES.length - 1)];
+
+            // HUD 배경 (레벨 색상 적용)
+            drawPixelRect(0, 0, width, 56, PALETTE.darkGray);
+            drawPixelRect(0, 52, width, 4, theme.costume.shirtDark);
+
+            // 시간
+            let timeCol = timeLeft > 10 ? PALETTE.green : PALETTE.red;
+            drawPixelText('TIME:' + timeLeft, 60, 18, 12, timeCol);
+
+            // 레벨 (레벨 색상)
+            drawPixelText('LV' + level, 60, 38, 10, theme.costume.shirt);
+
+            // 다음 레벨까지 점수
+            let nextLevelScore = level < 5 ? LEVEL_SCORES[level] : 999;
+            let progress = level < 5 ? score + '/' + nextLevelScore : 'MAX';
+            drawPixelText(progress, 60, 50, 7, PALETTE.lightGray);
+
+            // 점수
+            drawPixelText('SCORE', width/2, 14, 10, PALETTE.lightGray);
+            drawPixelText('' + score, width/2, 34, 16, PALETTE.yellow);
+
+            // 콤보
+            if (combo > 1) {
+                drawPixelText(combo + 'COMBO!', width/2, 50, 8, PALETTE.pink);
+            }
+
+            // 하트
+            for (let i = 0; i < 3; i++) {
+                drawPixelHeart(width - 80 + i * 22, 16, i < life);
+            }
+
+            // 종료 버튼
+            drawPixelRect(width - 44, 8, 36, 20, PALETTE.gray);
+            drawPixelText('X', width - 26, 18, 10, PALETTE.white);
+        }
+
+        function drawLevelUpPopup() {
+            let alpha = map(levelUpEffect, 0, 90, 0, 255);
+
+            // 배경 박스 (더 크게)
+            fill(0, 0, 0, alpha * 0.8);
+            noStroke();
+            rect(30, height/2 - 120, 340, 240);
+
+            let theme = LEVEL_THEMES[min(level - 1, LEVEL_THEMES.length - 1)];
+
+            // 테두리
+            drawPixelRect(34, height/2 - 116, 332, 232, theme.costume.shirt);
+            drawPixelRect(42, height/2 - 108, 316, 216, PALETTE.darkGray);
+
+            // 레벨업 텍스트
+            drawPixelText('LEVEL UP!', width/2, height/2 - 85, 22, PALETTE.yellow);
+
+            // 레벨 및 스테이지 이름
+            drawPixelText('LV' + level + ' ' + theme.name, width/2, height/2 - 55, 12, PALETTE.white);
+
+            // 구분선
+            drawPixelRect(60, height/2 - 38, 280, 4, PALETTE.gray);
+
+            // 보상 텍스트
+            drawPixelText('NEW COSTUME!', width/2, height/2 - 18, 12, PALETTE.pink);
+            drawPixelText(theme.reward, width/2, height/2 + 5, 14, PALETTE.yellow);
+
+            // 캐릭터 미리보기
+            drawPixelRect(width/2 - 40, height/2 + 25, 80, 80, PALETTE.darkBlue);
+            drawPixelPlayer(width/2, height/2 + 65, level);
+
+            // 반짝이 효과
+            if (frameCounter % 8 < 4) {
+                drawPixelRect(60, height/2 - 100, 8, 8, PALETTE.yellow);
+                drawPixelRect(332, height/2 - 80, 8, 8, PALETTE.yellow);
+                drawPixelRect(80, height/2 + 80, 8, 8, PALETTE.yellow);
+                drawPixelRect(312, height/2 + 60, 8, 8, PALETTE.yellow);
+            }
+        }
+
+        function drawGameOverScreen() {
+            let theme = LEVEL_THEMES[min(level - 1, LEVEL_THEMES.length - 1)];
+            background(theme.sky);
+
+            // 어두운 오버레이
+            fill(0, 0, 0, 180);
+            noStroke();
+            rect(0, 0, width, height);
+
+            // 결과 박스
+            drawPixelRect(30, 50, 340, 440, PALETTE.darkGray);
+            drawPixelRect(38, 58, 324, 424, PALETTE.darkBlue);
+
+            drawPixelText('GAME OVER', width/2, 95, 20, PALETTE.red);
+
+            // 등급
+            let grade = GRADES.find(g => score >= g.min) || GRADES[GRADES.length - 1];
+            drawPixelText(grade.title, width/2, 135, 18, grade.color);
+
+            // 점수
+            drawPixelText('SCORE', width/2, 175, 12, PALETTE.lightGray);
+            drawPixelText('' + score, width/2, 205, 24, PALETTE.yellow);
+
+            // 스탯
+            drawPixelText('MAX COMBO: ' + maxCombo, width/2, 245, 10, PALETTE.pink);
+
+            // 도달 레벨 및 캐릭터
+            drawPixelRect(120, 265, 160, 100, PALETTE.darkGray);
+            drawPixelRect(124, 269, 152, 92, theme.costume.shirtDark);
+            drawPixelText('LEVEL ' + level, width/2, 285, 12, PALETTE.white);
+            drawPixelText(theme.name, width/2, 302, 10, theme.costume.shirt);
+            drawPixelPlayer(width/2, 340, level);
+
+            // 획득 의상 표시
+            drawPixelText('COSTUME: ' + theme.reward, width/2, 385, 9, PALETTE.yellow);
+
+            // 버튼
+            drawPixelButton('RETRY', width/2, 430, 140, 40, PALETTE.green, PALETTE.darkGreen);
+            drawPixelButton('EXIT', width/2, 478, 140, 35, PALETTE.red, PALETTE.darkRed);
+
+            // 파티클
+            if (frameCounter % 15 === 0) {
+                createPixelExplosion(random(width), random(height/2),
+                    [PALETTE.yellow, PALETTE.pink, PALETTE.green][floor(random(3))]);
+            }
+            drawParticles();
+        }
+
+        // ============================================
+        // 입력 처리
+        // ============================================
+
+        function keyPressed() {
+            if (key === ' ' || keyCode === ENTER) {
+                if (gameState === 'start' || gameState === 'gameover') startGame();
+            }
+            if (key === 'Escape' || key === 'q') {
+                if (gameState === 'playing') { gameState = 'start'; stopBGM(); }
+            }
+            if (key === 'm') toggleBGM();
+            if (key === 'n') toggleSFX();
+        }
+
+        function mousePressed() {
+            initAudio();
+
+            if (gameState === 'start') {
+                // START 버튼 (y:270, h:45)
+                if (mouseY > 247 && mouseY < 293 && mouseX > 120 && mouseX < 280) startGame();
+                // EXIT 버튼 (y:325, h:35)
+                if (mouseY > 307 && mouseY < 343 && mouseX > 130 && mouseX < 270) {
+                    window.close();
+                }
+            }
+            else if (gameState === 'playing') {
+                if (mouseX > width - 44 && mouseY < 40) { gameState = 'start'; stopBGM(); }
+            }
+            else if (gameState === 'gameover') {
+                // RETRY 버튼 (y:430, h:40)
+                if (mouseY > 410 && mouseY < 450 && mouseX > 130 && mouseX < 270) startGame();
+                // EXIT 버튼 (y:478, h:35)
+                if (mouseY > 460 && mouseY < 496 && mouseX > 130 && mouseX < 270) gameState = 'start';
+            }
+        }
+    </script>
+</body>
+</html>
