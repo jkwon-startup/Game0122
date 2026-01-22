@@ -475,11 +475,12 @@
             for (let p of particles) {
                 if (p.isText) {
                     textSize(p.size * (p.scale || 1));
-                    fill(red(color(p.color)), green(color(p.color)), blue(color(p.color)), p.life * 255);
-                    stroke(0, 0, 0, p.life * 100);
-                    strokeWeight(3);
-                    text(p.text, p.x, p.y);
+                    // 깔끔한 그림자
                     noStroke();
+                    fill(0, 0, 0, p.life * 150);
+                    text(p.text, p.x + 2, p.y + 2);
+                    fill(red(color(p.color)), green(color(p.color)), blue(color(p.color)), p.life * 255);
+                    text(p.text, p.x, p.y);
                 } else {
                     textSize(p.size * p.life);
                     text(p.emoji, p.x, p.y);
@@ -535,13 +536,12 @@
         }
 
         function drawRainbowBorder() {
+            // 단순한 테두리
             noFill();
-            strokeWeight(4);
-            for (let i = 0; i < 6; i++) {
-                let c = color(COLORS.rainbow[(i + floor(rainbowOffset * 10)) % 6]);
-                stroke(red(c), green(c), blue(c), 200);
-                rect(i * 2, i * 2, width - i * 4, height - i * 4, 10);
-            }
+            strokeWeight(6);
+            let c = color(COLORS.rainbow[floor(rainbowOffset * 5) % 6]);
+            stroke(red(c), green(c), blue(c), 180);
+            rect(3, 3, width - 6, height - 6, 15);
         }
 
         // ============================================
@@ -747,15 +747,11 @@
                 text(emojis[i], x, y);
             }
 
-            textSize(52);
-            strokeWeight(4);
-            stroke(0, 0, 0, 100);
-            for (let i = 0; i < 6; i++) {
-                let c = color(COLORS.rainbow[(i + floor(frameCount * 0.1)) % 6]);
-                fill(red(c), green(c), blue(c), 150);
-                text('🍔 먹방 게임 🍕', width/2 + i - 3, height/4 + i - 3);
-            }
+            // 타이틀 (깔끔한 그림자)
+            textSize(48);
             noStroke();
+            fill(0, 0, 0, 80);
+            text('🍔 먹방 게임 🍕', width/2 + 3, height/4 + 3);
             fill(255);
             text('🍔 먹방 게임 🍕', width/2, height/4);
 
@@ -811,7 +807,7 @@
             text(label, x, y);
 
             if (hovered) {
-                fill(255, 255, 255, 120 + sin(frameCount * 0.2) * 60);
+                fill(255, 255, 255, 80);
                 noStroke();
                 rect(x - w/2 + 5, y - h/2 + 5, w - 10, h/3, 15);
             }
@@ -910,10 +906,9 @@
             text('🏆 ' + score + '점', width/2, 22);
 
             if (combo > 1) {
-                let comboScale = 1 + sin(frameCount * 0.3) * 0.1;
-                textSize(16 * comboScale);
+                textSize(15);
                 fill('#E91E63');
-                text('🔥 ' + combo + ' COMBO!', width/2, 48);
+                text('🔥 ' + combo + ' COMBO!', width/2, 50);
             }
 
             textSize(20);
@@ -942,24 +937,26 @@
 
         function drawLevelUpText() {
             let alpha = map(levelUpEffect, 0, 60, 0, 255);
-            let scale = map(levelUpEffect, 0, 60, 0.5, 1.5);
+            let scale = map(levelUpEffect, 0, 60, 0.8, 1.2);
 
             textAlign(CENTER, CENTER);
+            noStroke();
 
-            for (let i = 5; i > 0; i--) {
-                fill(255, 215, 0, alpha * 0.3);
-                textSize(50 * scale + i * 5);
-                text('🎉 LEVEL UP! 🎉', width/2, height/2);
-            }
+            // 배경 박스
+            fill(0, 0, 0, alpha * 0.5);
+            rect(width/2 - 150, height/2 - 50, 300, 120, 20);
 
+            // 레벨업 텍스트 (깔끔하게)
+            textSize(40 * scale);
+            fill(0, 0, 0, alpha * 0.5);
+            text('🎉 LEVEL UP! 🎉', width/2 + 2, height/2 + 2);
             fill(255, 255, 255, alpha);
-            textSize(50 * scale);
             text('🎉 LEVEL UP! 🎉', width/2, height/2);
 
             let theme = LEVEL_THEMES[min(level - 1, LEVEL_THEMES.length - 1)];
-            textSize(24);
-            fill(255, 255, 0, alpha);
-            text('Level ' + level + ': ' + theme.name, width/2, height/2 + 50);
+            textSize(20);
+            fill(255, 220, 0, alpha);
+            text('Level ' + level + ': ' + theme.name, width/2, height/2 + 40);
         }
 
         function drawGameOverScreen() {
@@ -976,15 +973,17 @@
             let grade = getGrade();
 
             textAlign(CENTER, CENTER);
-            textSize(40);
-            stroke(0, 0, 0, 150);
-            strokeWeight(4);
-            fill(255, 150, 150);
-            text('GAME OVER', width/2, height/8);
             noStroke();
 
-            let gradeScale = 1 + sin(frameCount * 0.1) * 0.1;
-            textSize(70 * gradeScale);
+            // GAME OVER (깔끔한 그림자)
+            textSize(36);
+            fill(0, 0, 0, 100);
+            text('GAME OVER', width/2 + 2, height/8 + 2);
+            fill(255, 100, 100);
+            text('GAME OVER', width/2, height/8);
+
+            // 등급 (크기 고정)
+            textSize(60);
             text(grade.grade, width/2, height/4 + 20);
 
             textSize(26);
